@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/camerapage"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/lavender">
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="120dp"/>
+
+    <Button
+        android:id="@+id/btnBreed"
+        android:layout_width="247dp"
+        android:layout_height="84dp"
+        android:layout_gravity="center"
+        android:backgroundTint="#D9D9D9"
+        android:text="Breed"
+        android:textColor="#000" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="93dp" />
+
+    <Button
+        android:id="@+id/btnDisease"
+        android:layout_width="247dp"
+        android:layout_height="80dp"
+        android:layout_gravity="center"
+        android:backgroundTint="#D9D9D9"
+        android:text="Disease"
+        android:textColor="#000" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    </LinearLayout>
+

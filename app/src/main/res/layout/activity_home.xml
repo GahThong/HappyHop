@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/camerapage"
+android:layout_width="match_parent"
+android:layout_height="match_parent"
+android:orientation="vertical"
+android:background="@color/lavender">
+
+    <ImageView
+        android:id="@+id/imageView"
+        android:layout_width="match_parent"
+        android:layout_height="125dp"
+        android:background="@color/warm_gray"
+        android:contentDescription="App Logo"
+        android:scaleType="centerInside"
+        android:src="@drawable/logo"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@+id/linearLayout"
+        app:layout_constraintTop_toBottomOf="@+id/imageView"
+        tools:context=".HomeActivity" />
+
+    <LinearLayout
+        android:id="@+id/linearLayout"
+        android:layout_width="match_parent"
+        android:layout_height="70dp"
+        android:background="@color/deep_magenta"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:weightSum="5"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/container"
+        tools:visibility="visible">
+
+        <ImageButton
+            android:id="@+id/btnCommunity"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="community"
+            android:scaleType="fitCenter"
+            android:src="@drawable/community" />
+
+        <ImageButton
+            android:id="@+id/btnNotification"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="notification"
+            android:scaleType="fitCenter"
+            android:src="@drawable/notification" />
+
+        <ImageButton
+            android:id="@+id/btnCamera"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="camera"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/camera" />
+
+        <ImageButton
+            android:id="@+id/btnMaps"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="maps"
+            android:scaleType="fitCenter"
+            android:src="@drawable/maps_icon" />
+
+        <ImageButton
+            android:id="@+id/btnAccount"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="account"
+            android:scaleType="fitCenter"
+            android:src="@drawable/google" />
+
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

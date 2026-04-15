@@ -1,0 +1,222 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/lavender"
+    android:orientation="vertical">
+
+    <!-- App Logo -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="125dp"
+        android:background="@color/warm_gray"
+        android:contentDescription="App Logo"
+        android:scaleType="centerInside"
+        android:src="@drawable/logo" />
+
+    <!-- Profile container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="30dp"
+        android:paddingBottom="20dp">
+
+        <!-- Username -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="270dp"
+            android:layout_height="60dp"
+            android:layout_marginBottom="15dp"
+            app:boxBackgroundMode="filled"
+            app:boxBackgroundColor="@color/light_gray"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusBottomEnd="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/accountUsername"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:hint="Username"
+                android:padding="15dp"
+                android:textColor="@color/black"
+                android:textColorHint="@color/black"
+                android:inputType="textPersonName"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Email -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="270dp"
+            android:layout_height="60dp"
+            android:layout_marginBottom="15dp"
+            app:boxBackgroundMode="filled"
+            app:boxBackgroundColor="@color/light_gray"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusBottomEnd="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/accountEmail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:hint="Email"
+                android:inputType="textEmailAddress"
+                android:padding="15dp"
+                android:textColor="@color/black"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Breed -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="270dp"
+            android:layout_height="60dp"
+            android:layout_marginBottom="15dp"
+            app:boxBackgroundMode="filled"
+            app:boxBackgroundColor="@color/light_gray"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusBottomEnd="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/accountBreed"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:hint="Breed"
+                android:padding="15dp"
+                android:textColor="@color/black"
+                android:textColorHint="@color/black"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Status -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="270dp"
+            android:layout_height="60dp"
+            android:layout_marginBottom="15dp"
+            app:boxBackgroundMode="filled"
+            app:boxBackgroundColor="@color/light_gray"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusBottomEnd="8dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/accountStatus"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:hint="Status"
+                android:padding="15dp"
+                android:textColor="@color/black"
+                android:textColorHint="@color/black"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Role Dropdown -->
+        <AutoCompleteTextView
+            android:id="@+id/accountRole"
+            android:layout_width="270dp"
+            android:layout_height="50dp"
+            android:layout_marginBottom="25dp"
+            android:hint="Select Role"
+            android:padding="15dp"
+            android:background="@color/light_gray"
+            android:textColor="@color/black"
+            android:textColorHint="@color/black"
+            android:inputType="none" />
+
+        <!-- Buttons -->
+        <LinearLayout
+            android:layout_width="270dp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="15dp">
+
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Save"
+                android:backgroundTint="@color/purple_500"
+                android:textColor="@color/white"/>
+
+            <Button
+                android:id="@+id/btnDiscard"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Discard"
+                android:layout_marginStart="10dp"
+                android:backgroundTint="@color/purple_200"
+                android:textColor="@color/white"/>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Bottom Navigation Icons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="70dp"
+        android:orientation="horizontal"
+        android:background="@color/deep_magenta"
+        android:gravity="center"
+        android:weightSum="5"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp">
+
+        <ImageButton
+            android:id="@+id/btnCommunity"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:src="@drawable/community"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="community" />
+
+        <ImageButton
+            android:id="@+id/btnNotification"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:src="@drawable/notification"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="notification" />
+
+        <ImageButton
+            android:id="@+id/btnCamera"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:src="@drawable/camera"
+            android:background="@android:color/transparent"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="camera" />
+
+        <ImageButton
+            android:id="@+id/btnMaps"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:src="@drawable/maps_icon"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="maps" />
+
+        <ImageButton
+            android:id="@+id/btnAccount"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:src="@drawable/google"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="account" />
+    </LinearLayout>
+</LinearLayout>

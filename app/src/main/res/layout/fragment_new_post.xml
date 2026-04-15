@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+
+    <ImageView
+        android:id="@+id/postImagePreview"
+        android:layout_width="238dp"
+        android:layout_height="194dp"
+        android:contentDescription=""/>
+
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="60sp"
+        android:layout_margin="10sp"
+        android:id="@+id/choosePostImage"
+        android:background="@android:color/holo_red_dark"
+        android:text="Choose Image"
+        android:textSize="16sp"/>
+
+    <EditText
+        android:id="@+id/postTextInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20sp"
+        android:background="@android:color/holo_purple"
+        android:gravity="top|start"
+        android:hint="Enter your description here..."
+        android:inputType="textMultiLine"
+        android:minLines="3"
+        android:padding="20sp" />
+
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="60sp"
+        android:layout_margin="10sp"
+        android:id="@+id/post"
+        android:text="Post"
+        android:textSize="16sp"/>
+
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="60sp"
+        android:layout_margin="10sp"
+        android:id="@+id/dismiss"
+        android:text="Cancel"
+        android:textSize="16sp"/>
+
+</LinearLayout>

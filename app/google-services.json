@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "396693874608",
+    "project_id": "bunnycare-93a65",
+    "storage_bucket": "bunnycare-93a65.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:396693874608:android:599052438e386b2ecf5875",
+        "android_client_info": {
+          "package_name": "com.example.bunnycare"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYnSWPVLh1dmZpjw2v3b0JdyAOxtNCQ5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:396693874608:android:9df71e73d0f6a94ecf5875",
+        "android_client_info": {
+          "package_name": "com.example.bunnycaretest"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYnSWPVLh1dmZpjw2v3b0JdyAOxtNCQ5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

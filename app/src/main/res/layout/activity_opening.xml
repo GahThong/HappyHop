@@ -1,0 +1,41 @@
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/lavender"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_marginBottom="10dp"
+        android:contentDescription="App Logo"
+        android:scaleType="centerInside"
+        android:src="@drawable/logo" />
+
+
+    <ImageView
+        android:layout_width="240dp"
+        android:layout_height="217dp"
+        android:layout_marginBottom="25dp"
+        android:contentDescription="Bunny Logo"
+        android:scaleType="centerInside"
+        android:src="@drawable/bunny" />
+
+
+    <Button
+        android:id="@+id/btnGoLogin"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:text="Login"
+        android:layout_marginBottom="10dp"/>
+
+
+    <Button
+        android:id="@+id/btnGoRegister"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:text="Register"/>
+</LinearLayout>
