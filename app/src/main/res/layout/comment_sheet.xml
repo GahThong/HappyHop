@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="400dp"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 🔥 COMMENTS LIST -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/commentRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="vertical" />
+
+    <!-- 🔥 INPUT BOX -->
+    <EditText
+        android:id="@+id/commentInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Write comment" />
+
+    <!-- 🔥 SEND BUTTON -->
+    <Button
+        android:id="@+id/sendComment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Send" />
+
+</LinearLayout>
