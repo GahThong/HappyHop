@@ -7,7 +7,6 @@
     android:background="@color/lavender"
     android:orientation="vertical">
 
-    <!-- Logo -->
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="81dp"
@@ -22,7 +21,6 @@
         android:gravity="center_horizontal"
         android:paddingTop="20dp">
 
-        <!-- Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -31,7 +29,6 @@
             android:textSize="28sp"
             android:layout_marginBottom="20dp" />
 
-        <!-- First Name -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -47,7 +44,6 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Last Name -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -63,7 +59,6 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Username -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -79,7 +74,6 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Email -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -96,7 +90,6 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Password -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -114,7 +107,6 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Re-enter Password -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="270dp"
             android:layout_height="60dp"
@@ -132,14 +124,12 @@
                 android:textColor="@color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Progress Bar -->
         <ProgressBar
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone" />
 
-        <!-- Sign Up Button -->
         <Button
             android:id="@+id/btnSignUp"
             android:layout_width="180dp"
@@ -147,6 +137,31 @@
             android:backgroundTint="@color/light_gray"
             android:text="Sign Up"
             android:textColor="@color/black" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="15dp"
+            android:text="──────── Or sign up with ────────"
+            android:textColor="@color/white" />
+
+        <ImageButton
+            android:id="@+id/btnGoogleSignUp"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginTop="10dp"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:src="@drawable/google" />
+
+        <TextView
+            android:id="@+id/textLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Already have an account?"
+            android:textColor="@color/white"
+            android:textSize="16sp" />
 
     </LinearLayout>
 </LinearLayout>

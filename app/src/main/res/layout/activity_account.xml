@@ -32,10 +32,8 @@
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
-            app:boxCornerRadiusTopStart="8dp"
-            app:boxCornerRadiusTopEnd="8dp"
-            app:boxCornerRadiusBottomStart="8dp"
-            app:boxCornerRadiusBottomEnd="8dp">
+            app:hintTextColor="@android:color/black"
+            app:boxStrokeColor="@android:color/black">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountUsername"
@@ -43,9 +41,7 @@
                 android:layout_height="match_parent"
                 android:hint="Username"
                 android:padding="15dp"
-                android:textColor="@color/black"
-                android:textColorHint="@color/black"
-                android:inputType="textPersonName"/>
+                android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Email -->
@@ -55,10 +51,8 @@
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
-            app:boxCornerRadiusTopStart="8dp"
-            app:boxCornerRadiusTopEnd="8dp"
-            app:boxCornerRadiusBottomStart="8dp"
-            app:boxCornerRadiusBottomEnd="8dp">
+            app:hintTextColor="@android:color/black"
+            app:boxStrokeColor="@android:color/black">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountEmail"
@@ -67,8 +61,7 @@
                 android:hint="Email"
                 android:inputType="textEmailAddress"
                 android:padding="15dp"
-                android:textColor="@color/black"
-                android:textColorHint="@color/black" />
+                android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Breed -->
@@ -78,10 +71,8 @@
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
-            app:boxCornerRadiusTopStart="8dp"
-            app:boxCornerRadiusTopEnd="8dp"
-            app:boxCornerRadiusBottomStart="8dp"
-            app:boxCornerRadiusBottomEnd="8dp">
+            app:hintTextColor="@android:color/black"
+            app:boxStrokeColor="@android:color/black">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountBreed"
@@ -89,8 +80,7 @@
                 android:layout_height="match_parent"
                 android:hint="Breed"
                 android:padding="15dp"
-                android:textColor="@color/black"
-                android:textColorHint="@color/black"/>
+                android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Status -->
@@ -100,10 +90,8 @@
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
-            app:boxCornerRadiusTopStart="8dp"
-            app:boxCornerRadiusTopEnd="8dp"
-            app:boxCornerRadiusBottomStart="8dp"
-            app:boxCornerRadiusBottomEnd="8dp">
+            app:hintTextColor="@android:color/black"
+            app:boxStrokeColor="@android:color/black">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountStatus"
@@ -111,8 +99,7 @@
                 android:layout_height="match_parent"
                 android:hint="Status"
                 android:padding="15dp"
-                android:textColor="@color/black"
-                android:textColorHint="@color/black"/>
+                android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Role Dropdown -->
@@ -124,9 +111,8 @@
             android:hint="Select Role"
             android:padding="15dp"
             android:background="@color/light_gray"
-            android:textColor="@color/black"
-            android:textColorHint="@color/black"
-            android:inputType="none" />
+            android:textColor="@android:color/black"
+            android:textColorHint="@android:color/black" />
 
         <!-- Buttons -->
         <LinearLayout
@@ -142,7 +128,7 @@
                 android:layout_height="wrap_content"
                 android:text="Save"
                 android:backgroundTint="@color/purple_500"
-                android:textColor="@color/white"/>
+                android:textColor="@android:color/white" />
 
             <Button
                 android:id="@+id/btnDiscard"
@@ -152,12 +138,12 @@
                 android:text="Discard"
                 android:layout_marginStart="10dp"
                 android:backgroundTint="@color/purple_200"
-                android:textColor="@color/white"/>
+                android:textColor="@android:color/white" />
         </LinearLayout>
 
     </LinearLayout>
 
-    <!-- Bottom Navigation Icons -->
+    <!-- Bottom Navigation -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="70dp"
@@ -219,4 +205,5 @@
             android:scaleType="fitCenter"
             android:contentDescription="account" />
     </LinearLayout>
+
 </LinearLayout>

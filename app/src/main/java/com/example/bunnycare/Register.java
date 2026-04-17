@@ -1,17 +1,20 @@
 package com.example.bunnycare;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ProgressBar;
-import android.widget.Toast;
+import android.widget.*;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.auth.api.signin.*;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.*;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.HashMap;
@@ -22,9 +25,14 @@ public class Register extends AppCompatActivity {
     private TextInputEditText firstName, lastName, username, email, password, repassword;
     private Button btnSignUp;
     private ProgressBar progressBar;
+    private TextView textLogin;
+    private ImageButton btnGoogleSignUp;
 
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
+
+    private GoogleSignInClient googleSignInClient;
+    private ActivityResultLauncher<Intent> googleSignInLauncher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,8 +50,86 @@ public class Register extends AppCompatActivity {
         repassword = findViewById(R.id.repassword);
         btnSignUp = findViewById(R.id.btnSignUp);
         progressBar = findViewById(R.id.progressBar);
+        textLogin = findViewById(R.id.textLogin);
+        btnGoogleSignUp = findViewById(R.id.btnGoogleSignUp);
 
         btnSignUp.setOnClickListener(v -> validateInputs());
+
+        textLogin.setOnClickListener(v -> {
+            startActivity(new Intent(Register.this, Login.class));
+            finish();
+        });
+
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build();
+
+        googleSignInClient = GoogleSignIn.getClient(this, gso);
+
+        googleSignInLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK) {
+                        Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                        try {
+                            GoogleSignInAccount account = task.getResult(ApiException.class);
+                            firebaseAuthWithGoogle(account);
+                        } catch (Exception e) {
+                            Toast.makeText(this, "Google Sign-Up Failed", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+        );
+
+        btnGoogleSignUp.setOnClickListener(v -> {
+            Intent signInIntent = googleSignInClient.getSignInIntent();
+            googleSignInLauncher.launch(signInIntent);
+        });
+    }
+
+    private void firebaseAuthWithGoogle(GoogleSignInAccount account) {
+        AuthCredential credential = GoogleAuthProvider.getCredential(account.getIdToken(), null);
+
+        progressBar.setVisibility(View.VISIBLE);
+
+        mAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, task -> {
+                    progressBar.setVisibility(View.GONE);
+
+                    if (task.isSuccessful()) {
+
+                        FirebaseUser user = mAuth.getCurrentUser();
+
+                        if (user != null) {
+
+                            boolean isNewUser = task.getResult()
+                                    .getAdditionalUserInfo()
+                                    .isNewUser();
+
+                            String uid = user.getUid();
+
+                            if (isNewUser) {
+                                Map<String, Object> userMap = new HashMap<>();
+                                userMap.put("firstName", account.getGivenName());
+                                userMap.put("lastName", account.getFamilyName());
+                                userMap.put("username", account.getDisplayName());
+                                userMap.put("email", account.getEmail());
+                                userMap.put("verified", true);
+
+                                db.collection("users")
+                                        .document(uid)
+                                        .set(userMap);
+                            }
+
+                            startActivity(new Intent(Register.this, HomeActivity.class));
+                            finish();
+                        }
+
+                    } else {
+                        Toast.makeText(Register.this, "Google Authentication Failed", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void validateInputs() {
@@ -107,7 +193,6 @@ public class Register extends AppCompatActivity {
 
                             firebaseUser.sendEmailVerification();
 
-
                             String uid = firebaseUser.getUid();
 
                             Map<String, Object> userMap = new HashMap<>();
@@ -115,6 +200,7 @@ public class Register extends AppCompatActivity {
                             userMap.put("lastName", lName);
                             userMap.put("username", userName);
                             userMap.put("email", email);
+                            userMap.put("verified", false);
 
                             db.collection("users")
                                     .document(uid)

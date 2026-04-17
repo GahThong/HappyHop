@@ -1,23 +1,22 @@
 package com.example.bunnycare;
 
+import android.content.Intent;
 import android.graphics.Paint;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ImageButton;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.content.Intent;
-import android.widget.EditText;
+import android.widget.*;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.auth.api.signin.*;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.*;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 
 public class Login extends AppCompatActivity {
 
@@ -29,12 +28,15 @@ public class Login extends AppCompatActivity {
     private TextView textSignUp, textForgotPassword;
     private ImageButton btnGoogleLogin;
 
+    private GoogleSignInClient googleSignInClient;
+
+    private ActivityResultLauncher<Intent> googleSignInLauncher;
+
     @Override
     protected void onStart() {
         super.onStart();
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
 
-        // Auto-login if user already signed in
         if (user != null) {
             startActivity(new Intent(Login.this, HomeActivity.class));
             finish();
@@ -48,7 +50,6 @@ public class Login extends AppCompatActivity {
 
         mAuth = FirebaseAuth.getInstance();
 
-        // Bind views
         editTextEmail = findViewById(R.id.username);
         editTextPassword = findViewById(R.id.password);
         btnLogin = findViewById(R.id.btnGoLogin);
@@ -57,24 +58,59 @@ public class Login extends AppCompatActivity {
         textForgotPassword = findViewById(R.id.forgotPass);
         btnGoogleLogin = findViewById(R.id.btnGoogleLogin);
 
-        // Underline Sign Up text
         textSignUp.setPaintFlags(textSignUp.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
 
-        // Navigate to RegisterActivity
-        textSignUp.setOnClickListener(view -> {
-            startActivity(new Intent(Login.this, Register.class));
-        });
+        textSignUp.setOnClickListener(view ->
+                startActivity(new Intent(Login.this, Register.class))
+        );
 
-        // Forgot password
         textForgotPassword.setOnClickListener(view -> showForgotPasswordDialog());
 
-        // Login button
         btnLogin.setOnClickListener(view -> loginUser());
 
-        // Placeholder Google login
-        btnGoogleLogin.setOnClickListener(view ->
-                Toast.makeText(Login.this, "Google Login clicked", Toast.LENGTH_SHORT).show()
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build();
+
+        googleSignInClient = GoogleSignIn.getClient(this, gso);
+
+        googleSignInLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK) {
+                        Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                        try {
+                            GoogleSignInAccount account = task.getResult(ApiException.class);
+                            firebaseAuthWithGoogle(account.getIdToken());
+                        } catch (Exception e) {
+                            Toast.makeText(this, "Google Sign-In Failed", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
         );
+
+        btnGoogleLogin.setOnClickListener(view -> {
+            Intent signInIntent = googleSignInClient.getSignInIntent();
+            googleSignInLauncher.launch(signInIntent);
+        });
+    }
+
+    private void firebaseAuthWithGoogle(String idToken) {
+        AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
+
+        progressBar.setVisibility(View.VISIBLE);
+
+        mAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, task -> {
+                    progressBar.setVisibility(View.GONE);
+                    if (task.isSuccessful()) {
+                        startActivity(new Intent(Login.this, HomeActivity.class));
+                        finish();
+                    } else {
+                        Toast.makeText(Login.this, "Authentication Failed", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void loginUser() {
@@ -92,7 +128,6 @@ public class Login extends AppCompatActivity {
                 .addOnCompleteListener(task -> {
                     progressBar.setVisibility(View.GONE);
                     if (task.isSuccessful()) {
-                        Toast.makeText(Login.this, "Login Successful", Toast.LENGTH_SHORT).show();
                         startActivity(new Intent(Login.this, HomeActivity.class));
                         finish();
                     } else {
@@ -108,27 +143,53 @@ public class Login extends AppCompatActivity {
         builder.setTitle("Reset Password");
 
         final EditText input = new EditText(Login.this);
-        input.setHint("Enter your email");
+        input.setHint("Enter your registered email");
+        input.setPadding(40, 30, 40, 30);
         builder.setView(input);
 
-        builder.setPositiveButton("Send", (dialog, which) -> {
-            String email = input.getText().toString().trim();
-            if (TextUtils.isEmpty(email)) {
-                Toast.makeText(Login.this, "Enter your email", Toast.LENGTH_SHORT).show();
-                return;
-            }
+        builder.setPositiveButton("Send", null);
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
 
-            mAuth.sendPasswordResetEmail(email)
-                    .addOnCompleteListener(task -> {
-                        if (task.isSuccessful()) {
-                            Toast.makeText(Login.this, "Recovery email sent!", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(Login.this, "Failed to send recovery email", Toast.LENGTH_SHORT).show();
-                        }
-                    });
+        AlertDialog dialog = builder.create();
+
+        dialog.setOnShowListener(d -> {
+            Button sendBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+
+            sendBtn.setOnClickListener(v -> {
+                String email = input.getText().toString().trim();
+
+                if (TextUtils.isEmpty(email)) {
+                    input.setError("Email is required");
+                    return;
+                }
+
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    input.setError("Enter a valid email");
+                    return;
+                }
+
+                progressBar.setVisibility(View.VISIBLE);
+
+                mAuth.sendPasswordResetEmail(email)
+                        .addOnCompleteListener(task -> {
+                            progressBar.setVisibility(View.GONE);
+
+                            if (task.isSuccessful()) {
+                                Toast.makeText(Login.this,
+                                        "Password reset email sent. Check your inbox.",
+                                        Toast.LENGTH_LONG).show();
+                                dialog.dismiss();
+                            } else {
+                                Toast.makeText(Login.this,
+                                        task.getException() != null ?
+                                                task.getException().getMessage() :
+                                                "Failed to send email",
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        });
+            });
         });
 
-        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
-        builder.show();
+        dialog.show();
     }
 }
