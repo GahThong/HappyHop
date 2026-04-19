@@ -58,16 +58,11 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.ktx)
     implementation(libs.legacy.support.v4)
 
-    implementation("org.mapsforge:mapsforge-core:0.23.0")
-    implementation("org.mapsforge:mapsforge-map:0.23.0")
-    implementation("org.mapsforge:mapsforge-map-reader:0.23.0")
-    implementation("org.mapsforge:mapsforge-themes:0.23.0")
-    implementation("org.mapsforge:mapsforge-map-android:0.23.0")
-    implementation("org.mapsforge:mapsforge-poi:0.23.0")
-    implementation("org.mapsforge:mapsforge-poi-android:0.23.0")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("com.github.MKergall:osmbonuspack:6.9.0")
 
     implementation("com.caverock:androidsvg:1.4")
-    implementation("com.google.android.gms:play-services-location:17.0.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation("com.cloudinary:cloudinary-android:3.0.2")
 
