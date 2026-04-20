@@ -1,4 +1,4 @@
-0 Newzealand
-1 Lionheaded
-2 Holland
-3 Californian
+0 Holland
+1 California
+2 New zealand
+3 Lionhead

@@ -5,12 +5,13 @@ import android.os.Bundle;
 import androidx.fragment.app.Fragment;
 import android.view.*;
 import android.widget.*;
+
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
 
 public class Account extends Fragment {
 
-    EditText txtUsername, txtEmail, txtBreed, txtStatus;
+    EditText txtUsername, txtEmail, txtBreed;
     AutoCompleteTextView txtRole;
     Button btnSave, btnDiscard;
     ImageView menuIcon;
@@ -24,7 +25,8 @@ public class Account extends Fragment {
     public Account() {}
 
     public static Fragment newInstance() {
-    return null; }
+        return null;
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -35,13 +37,12 @@ public class Account extends Fragment {
         txtUsername = view.findViewById(R.id.accountUsername);
         txtEmail = view.findViewById(R.id.accountEmail);
         txtBreed = view.findViewById(R.id.accountBreed);
-        txtStatus = view.findViewById(R.id.accountStatus);
         txtRole = view.findViewById(R.id.accountRole);
         btnSave = view.findViewById(R.id.btnSave);
         btnDiscard = view.findViewById(R.id.btnDiscard);
         menuIcon = view.findViewById(R.id.menuIcon);
 
-        String[] roles = {"Pet Owner", "Vet", "Volunteer"};
+        String[] roles = {"Pet Owner", "Vet"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
                 android.R.layout.simple_dropdown_item_1line, roles);
         txtRole.setAdapter(adapter);
@@ -58,16 +59,14 @@ public class Account extends Fragment {
                             String username = doc.getString("username");
                             String email = doc.getString("email");
                             String breed = doc.getString("breed");
-                            String status = doc.getString("status");
                             String role = doc.getString("role");
 
                             txtUsername.setText(username);
                             txtEmail.setText(email);
                             txtBreed.setText(breed);
-                            txtStatus.setText(status);
                             txtRole.setText(role, false);
 
-                            originalUser = new User(username, email, breed, status, role);
+                            originalUser = new User(username, email, breed, role);
                         }
                     });
         }
@@ -78,7 +77,6 @@ public class Account extends Fragment {
                         txtUsername.getText().toString(),
                         txtEmail.getText().toString(),
                         txtBreed.getText().toString(),
-                        txtStatus.getText().toString(),
                         txtRole.getText().toString()
                 );
 
@@ -96,7 +94,6 @@ public class Account extends Fragment {
                 txtUsername.setText(originalUser.getUsername());
                 txtEmail.setText(originalUser.getEmail());
                 txtBreed.setText(originalUser.getBreed());
-                txtStatus.setText(originalUser.getStatus());
                 txtRole.setText(originalUser.getRole(), false);
             }
         });
@@ -119,7 +116,7 @@ public class Account extends Fragment {
                 return true;
             }
 
-            if (item.getItemId() == R.id.menu_switch) {
+            if (item.getItemId() == R.id.menu_verify_account) {
                 startActivity(new Intent(getActivity(), Login.class));
                 getActivity().finish();
                 return true;

@@ -33,7 +33,6 @@ public class CameraActivity extends AppCompatActivity {
     int imageSize = 224;
 
     AlertDialog.Builder resultDialogBuilder;
-    AlertDialog resultDialog;
 
     String currentMode = "BREED";
 
@@ -57,7 +56,7 @@ public class CameraActivity extends AppCompatActivity {
                                     ImageClassifier.ImageClassifierOptions.builder()
                                             .setBaseOptions(BaseOptions.builder().useGpu().build())
                                             .setMaxResults(1)
-                                            .setScoreThreshold(0.90f)
+                                            .setScoreThreshold(0.95f)
                                             .build();
 
                             String modelFile = currentMode.equals("BREED")
@@ -72,52 +71,33 @@ public class CameraActivity extends AppCompatActivity {
                                     imageClassifier.classify(TensorImage.fromBitmap(processedImage));
 
                             Classifications classification = results.get(0);
-                            int index = classification.getCategories().get(0).getIndex();
 
-                            String result;
+                            String label = classification.getCategories().get(0).getLabel();
+                            float confidence = classification.getCategories().get(0).getScore();
+
+                            String result = label;
                             String info;
 
                             if (currentMode.equals("BREED")) {
-
-                                String[] classes = {
-                                        "New Zealand",
-                                        "Lionhead",
-                                        "Holland",
-                                        "Californian",
-                                        "Unknown"
-                                };
-
-                                if (index >= classes.length) index = classes.length - 1;
-
-                                result = classes[index];
-                                info = getCareInfo(result);
+                                info = getCareInfo(label);
 
                                 resultDialogBuilder
                                         .setTitle("Detected Breed")
-                                        .setMessage("Breed: " + result + "\n\n" + info)
+                                        .setMessage("Breed: " + result +
+                                                "\n\n" + info)
                                         .setPositiveButton("OK", null);
-
                             } else {
-
-                                String[] diseaseClasses = {
-                                        "Myxomatosis",
-                                        "Mites",
-                                        "Malocclusion",
-                                        "Pasteurellosis"
-                                };
-
-                                if (index >= diseaseClasses.length) index = diseaseClasses.length - 1;
-
-                                result = diseaseClasses[index];
-                                info = getDiseaseInfo(result);
+                                info = getDiseaseInfo(label);
 
                                 resultDialogBuilder
                                         .setTitle("Detected Disease")
+                                        .setMessage("Disease: " + result +
+                                                "\n\n" + info)
                                         .setPositiveButton("OK", null);
                             }
 
-                            resultDialog = resultDialogBuilder.create();
-                            resultDialog.show();
+                            AlertDialog dialog = resultDialogBuilder.create();
+                            dialog.show();
 
                         } catch (Exception e) {
                             Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
@@ -157,47 +137,48 @@ public class CameraActivity extends AppCompatActivity {
     }
 
     private void openCamera() {
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED) {
-
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
             takePictureActivityResultLauncher.launch(null);
-
         } else {
-            requestPermissions(
-                    new String[]{Manifest.permission.CAMERA},
-                    CAMERA_REQUEST_CODE);
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
         }
     }
 
     private String getCareInfo(String breed) {
-        switch (breed) {
-            case "New Zealand":
+        switch (breed.toLowerCase()) {
+
+            case "new zealand":
                 return "Large cage\nHay unlimited\nPellets 1/2–1 cup";
-            case "Lionhead":
+
+            case "lionhead":
                 return "Groom often\nHay unlimited\nPellets 1/4–1/2 cup";
-            case "Holland":
+
+            case "holland":
+            case "holland lop":
                 return "Needs playtime\nHay unlimited\nPellets 1/4 cup";
-            case "Californian":
+
+            case "californian":
                 return "Clean space\nHay unlimited\nPellets 1/2–1 cup";
+
             default:
                 return "Basic rabbit care";
         }
     }
 
     private String getDiseaseInfo(String disease) {
-        switch (disease) {
+        switch (disease.toLowerCase()) {
 
-            case "Myxomatosis":
-                return "Serious viral disease\nIsolate and vet immediately";
+            case "myxomatosis":
+                return "Isolate immediately\nVet ASAP";
 
-            case "Mites":
-                return "Parasites\nTreat with medication\nClean cage";
+            case "mites":
+                return "Parasites\nUse anti-mite treatment";
 
-            case "Malocclusion":
-                return "Teeth problem\nNeeds trimming";
+            case "malocclusion":
+                return "Dental issue\nNeeds vet trimming";
 
-            case "Pasteurellosis":
+            case "pasteurellosis":
                 return "Bacterial infection\nNeeds antibiotics";
 
             default:

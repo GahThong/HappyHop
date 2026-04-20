@@ -21,7 +21,7 @@
         android:layout_marginTop="20dp"
         android:src="@drawable/account_user"
         android:clickable="true"
-        android:focusable="true"/>
+        android:focusable="true" />
 
     <!-- FORM -->
     <LinearLayout
@@ -35,86 +35,77 @@
         <!-- Username -->
         <EditText
             android:id="@+id/accountUsername"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
+            android:layout_width="300dp"
+            android:layout_height="72dp"
             android:hint="Username"
             android:textColor="@android:color/black"
             android:textColorHint="@android:color/black"
             android:background="@color/light_gray"
-            android:padding="10dp"/>
+            android:padding="16dp"
+            android:layout_marginBottom="12dp" />
 
         <!-- Email -->
         <EditText
             android:id="@+id/accountEmail"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:layout_marginTop="10dp"
+            android:layout_width="300dp"
+            android:layout_height="72dp"
             android:hint="Email"
             android:textColor="@android:color/black"
             android:textColorHint="@android:color/black"
             android:background="@color/light_gray"
-            android:padding="10dp"/>
+            android:padding="16dp"
+            android:layout_marginBottom="12dp" />
 
         <!-- BREED DROPDOWN -->
         <AutoCompleteTextView
             android:id="@+id/accountBreed"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:layout_marginTop="10dp"
+            android:layout_width="300dp"
+            android:layout_height="72dp"
             android:hint="Breed"
             android:textColor="@android:color/black"
             android:textColorHint="@android:color/black"
             android:background="@color/light_gray"
-            android:padding="10dp"
-            android:inputType="none"/>
-
-        <!-- STATUS DROPDOWN -->
-        <AutoCompleteTextView
-            android:id="@+id/accountStatus"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:layout_marginTop="10dp"
-            android:hint="Status"
-            android:textColor="@android:color/black"
-            android:textColorHint="@android:color/black"
-            android:background="@color/light_gray"
-            android:padding="10dp"
-            android:inputType="none"/>
+            android:padding="16dp"
+            android:layout_marginBottom="12dp"
+            android:inputType="none" />
 
         <!-- ROLE DROPDOWN -->
         <AutoCompleteTextView
             android:id="@+id/accountRole"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:layout_marginTop="10dp"
+            android:layout_width="300dp"
+            android:layout_height="72dp"
             android:hint="Role"
             android:textColor="@android:color/black"
             android:textColorHint="@android:color/black"
             android:background="@color/light_gray"
-            android:padding="10dp"
-            android:inputType="none"/>
+            android:padding="16dp"
+            android:layout_marginBottom="15dp"
+            android:inputType="none" />
 
         <!-- BUTTONS -->
         <LinearLayout
-            android:layout_width="280dp"
+            android:layout_width="300dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="15dp">
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btnSave"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="45dp"
-                android:text="Save"/>
+                android:layout_height="50dp"
+                android:text="Save"
+                android:backgroundTint="@color/purple_500"
+                android:textColor="@android:color/white" />
 
             <Button
                 android:id="@+id/btnDiscard"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="45dp"
+                android:layout_height="50dp"
                 android:layout_marginStart="10dp"
-                android:text="Discard"/>
+                android:text="Discard"
+                android:backgroundTint="@color/purple_200"
+                android:textColor="@android:color/white" />
         </LinearLayout>
 
     </LinearLayout>

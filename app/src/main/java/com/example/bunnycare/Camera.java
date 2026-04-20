@@ -29,15 +29,10 @@ import java.util.List;
 
 public class Camera extends Fragment {
 
-    public static Camera newInstance() {
-        return new Camera();
-    }
-
     final int CAMERA_REQUEST_CODE = 1808;
     int imageSize = 224;
 
     AlertDialog.Builder resultDialogBuilder;
-    AlertDialog resultDialog;
 
     String currentMode = "BREED";
 
@@ -50,7 +45,6 @@ public class Camera extends Fragment {
                             return;
                         }
 
-
                         Bitmap processedImage = image;
                         int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
                         processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
@@ -58,90 +52,59 @@ public class Camera extends Fragment {
 
                         try {
 
-
                             ImageClassifier.ImageClassifierOptions options =
                                     ImageClassifier.ImageClassifierOptions.builder()
                                             .setBaseOptions(BaseOptions.builder().useGpu().build())
                                             .setMaxResults(1)
-                                            .setScoreThreshold(0.90f)
+                                            .setScoreThreshold(0.95f)
                                             .build();
-
 
                             String modelFile = currentMode.equals("BREED")
                                     ? "model.tflite"
                                     : "diseasemodel.tflite";
 
-                            ImageClassifier imageClassifier =
+                            ImageClassifier classifier =
                                     ImageClassifier.createFromFileAndOptions(
                                             getActivity(), modelFile, options);
 
                             List<Classifications> results =
-                                    imageClassifier.classify(TensorImage.fromBitmap(processedImage));
+                                    classifier.classify(TensorImage.fromBitmap(processedImage));
 
                             Classifications classification = results.get(0);
 
-                            int index = classification.getCategories().get(0).getIndex();
+                            String label = classification.getCategories().get(0).getLabel();
                             float confidence = classification.getCategories().get(0).getScore();
 
-                            String result;
                             String info;
 
-
                             if (currentMode.equals("BREED")) {
-
-                                String[] classes = {
-                                        "New Zealand",
-                                        "Lionhead",
-                                        "Holland",
-                                        "Californian",
-                                        "Unknown"
-                                };
-
-                                if (index >= classes.length) index = classes.length - 1;
-
-                                result = classes[index];
-                                info = getCareInfo(result);
+                                info = getCareInfo(label);
 
                                 resultDialogBuilder
                                         .setTitle("Detected Breed")
-                                        .setMessage("Breed: " + result +
+                                        .setMessage(label +
                                                 "\n\n" + info)
                                         .setPositiveButton("OK", null);
-
-                            }
-                            // 🔹 DISEASE MODE
-                            else {
-
-                                String[] diseaseClasses = {
-                                        "Myxomatosis",
-                                        "Mites",
-                                        "Malocclusion",
-                                        "Pasteurellosis"
-                                };
-
-                                if (index >= diseaseClasses.length) index = diseaseClasses.length - 1;
-
-                                result = diseaseClasses[index];
-                                info = getDiseaseInfo(result);
+                            } else {
+                                info = getDiseaseInfo(label);
 
                                 resultDialogBuilder
                                         .setTitle("Detected Disease")
-                                        .setMessage("Result: " + result +
+                                        .setMessage(label +
                                                 "\n\n" + info)
                                         .setPositiveButton("OK", null);
                             }
 
-                            resultDialog = resultDialogBuilder.create();
-                            resultDialog.show();
+                            resultDialogBuilder.create().show();
 
                         } catch (Exception e) {
                             Toast.makeText(getActivity(), e.getMessage(), Toast.LENGTH_LONG).show();
                         }
                     });
 
-    @SuppressLint("MissingInflatedId")
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
+
         Button btnBreed = view.findViewById(R.id.btnBreed);
         Button btnDisease = view.findViewById(R.id.btnDisease);
 
@@ -159,59 +122,52 @@ public class Camera extends Fragment {
     }
 
     private void openCamera() {
-        if (ContextCompat.checkSelfPermission(
-                getActivity(), Manifest.permission.CAMERA)
+        if (ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
-
             takePictureActivityResultLauncher.launch(null);
-
         } else {
-            requestPermissions(
-                    new String[]{Manifest.permission.CAMERA},
-                    CAMERA_REQUEST_CODE
-            );
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
         }
     }
-
 
     private String getCareInfo(String breed) {
-        switch (breed) {
+        switch (breed.toLowerCase()) {
 
-            case "New Zealand":
-                return "Care Tips:\n• Large cage\n• Moderate exercise\n\nFeeding:\n• Hay unlimited\n• Pellets 1/2–1 cup";
+            case "new zealand":
+                return "Hay unlimited\nPellets 1/2 cup";
 
-            case "Lionhead":
-                return "Care Tips:\n• Groom regularly\n• Cool environment\n\nFeeding:\n• Hay unlimited\n• Pellets 1/4–1/2 cup";
+            case "lionhead":
+                return "Regular grooming\nHay unlimited";
 
-            case "Holland":
-                return "Care Tips:\n• Needs playtime\n\nFeeding:\n• Hay unlimited\n• Pellets 1/4 cup";
+            case "holland":
+            case "holland lop":
+                return "Playtime needed\nHay unlimited";
 
-            case "Californian":
-                return "Care Tips:\n• Clean environment\n\nFeeding:\n• Hay unlimited\n• Pellets 1/2–1 cup";
+            case "californian":
+                return "Clean cage\nBalanced diet";
 
             default:
-                return "Basic rabbit care applies.";
+                return "Basic rabbit care";
         }
     }
 
-
     private String getDiseaseInfo(String disease) {
-        switch (disease) {
+        switch (disease.toLowerCase()) {
 
-            case "Myxomatosis":
-                return "⚠ Serious viral disease\n\nSymptoms:\n• Swollen eyes\n• Lethargy\n\nAction:\n• Isolate immediately\n• Vet ASAP";
+            case "myxomatosis":
+                return "Isolate + Vet";
 
-            case "Mites":
-                return "Parasite infection\n\nSymptoms:\n• Itching\n• Hair loss\n\nTreatment:\n• Anti-mite meds\n• Clean cage";
+            case "mites":
+                return "Anti-parasitic treatment";
 
-            case "Malocclusion":
-                return "Dental issue\n\nSymptoms:\n• Overgrown teeth\n• Difficulty eating\n\nTreatment:\n• Vet trimming\n• Chew toys";
+            case "malocclusion":
+                return "Dental care needed";
 
-            case "Pasteurellosis":
-                return "Bacterial infection\n\nSymptoms:\n• Runny nose\n• Sneezing\n\nTreatment:\n• Antibiotics\n• Clean area";
+            case "pasteurellosis":
+                return "Antibiotics required";
 
             default:
-                return "Unknown disease.\nConsult a veterinarian.";
+                return "Consult vet";
         }
     }
 

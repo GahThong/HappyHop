@@ -27,8 +27,8 @@
 
         <!-- Username -->
         <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="270dp"
-            android:layout_height="60dp"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
@@ -38,16 +38,16 @@
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountUsername"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="72dp"
                 android:hint="Username"
-                android:padding="15dp"
+                android:padding="16dp"
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Email -->
         <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="270dp"
-            android:layout_height="60dp"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
@@ -57,17 +57,17 @@
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountEmail"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="72dp"
                 android:hint="Email"
                 android:inputType="textEmailAddress"
-                android:padding="15dp"
+                android:padding="16dp"
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Breed -->
         <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="270dp"
-            android:layout_height="60dp"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="15dp"
             app:boxBackgroundMode="filled"
             app:boxBackgroundColor="@color/light_gray"
@@ -77,46 +77,28 @@
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/accountBreed"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="72dp"
                 android:hint="Breed"
-                android:padding="15dp"
-                android:textColor="@android:color/black" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <!-- Status -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="270dp"
-            android:layout_height="60dp"
-            android:layout_marginBottom="15dp"
-            app:boxBackgroundMode="filled"
-            app:boxBackgroundColor="@color/light_gray"
-            app:hintTextColor="@android:color/black"
-            app:boxStrokeColor="@android:color/black">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/accountStatus"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:hint="Status"
-                android:padding="15dp"
+                android:padding="16dp"
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Role Dropdown -->
+
+        <!-- Buttons -->
         <AutoCompleteTextView
             android:id="@+id/accountRole"
-            android:layout_width="270dp"
-            android:layout_height="50dp"
-            android:layout_marginBottom="25dp"
-            android:hint="Select Role"
-            android:padding="15dp"
+            android:layout_width="300dp"
+            android:layout_height="72dp"
+            android:layout_marginBottom="15dp"
             android:background="@color/light_gray"
+            android:hint="Select Role"
+            android:padding="16dp"
             android:textColor="@android:color/black"
             android:textColorHint="@android:color/black" />
 
-        <!-- Buttons -->
         <LinearLayout
-            android:layout_width="270dp"
+            android:layout_width="300dp"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginBottom="15dp">
