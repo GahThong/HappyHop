@@ -35,7 +35,7 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentAdapter.ViewHold
         String userName = "";
         String text = "";
 
-        Object nameObj = comment.get("userName");
+        Object nameObj = comment.get("username");
         Object textObj = comment.get("text");
 
         if (nameObj != null) userName = String.valueOf(nameObj);
