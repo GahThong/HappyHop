@@ -29,82 +29,12 @@ import java.util.List;
 
 public class CameraActivity extends AppCompatActivity {
 
-    final int CAMERA_REQUEST_CODE = 1808;
     int imageSize = 224;
-
-    AlertDialog.Builder resultDialogBuilder;
-
     String currentMode = "BREED";
 
-    ActivityResultLauncher<Void> takePictureActivityResultLauncher =
-            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(),
-                    image -> {
+    ActivityResultLauncher<Void> takePictureLauncher;
+    ActivityResultLauncher<String> permissionLauncher;
 
-                        if (image == null) {
-                            Toast.makeText(getApplicationContext(), "No image captured", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-
-                        Bitmap processedImage = image;
-                        int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
-                        processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
-                        processedImage = Bitmap.createScaledBitmap(processedImage, imageSize, imageSize, false);
-
-                        try {
-
-                            ImageClassifier.ImageClassifierOptions options =
-                                    ImageClassifier.ImageClassifierOptions.builder()
-                                            .setBaseOptions(BaseOptions.builder().useGpu().build())
-                                            .setMaxResults(1)
-                                            .setScoreThreshold(0.95f)
-                                            .build();
-
-                            String modelFile = currentMode.equals("BREED")
-                                    ? "model.tflite"
-                                    : "diseasemodel.tflite";
-
-                            ImageClassifier imageClassifier =
-                                    ImageClassifier.createFromFileAndOptions(
-                                            getApplicationContext(), modelFile, options);
-
-                            List<Classifications> results =
-                                    imageClassifier.classify(TensorImage.fromBitmap(processedImage));
-
-                            Classifications classification = results.get(0);
-
-                            String label = classification.getCategories().get(0).getLabel();
-                            float confidence = classification.getCategories().get(0).getScore();
-
-                            String result = label;
-                            String info;
-
-                            if (currentMode.equals("BREED")) {
-                                info = getCareInfo(label);
-
-                                resultDialogBuilder
-                                        .setTitle("Detected Breed")
-                                        .setMessage("Breed: " + result +
-                                                "\n\n" + info)
-                                        .setPositiveButton("OK", null);
-                            } else {
-                                info = getDiseaseInfo(label);
-
-                                resultDialogBuilder
-                                        .setTitle("Detected Disease")
-                                        .setMessage("Disease: " + result +
-                                                "\n\n" + info)
-                                        .setPositiveButton("OK", null);
-                            }
-
-                            AlertDialog dialog = resultDialogBuilder.create();
-                            dialog.show();
-
-                        } catch (Exception e) {
-                            Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
-                        }
-                    });
-
-    @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -121,7 +51,75 @@ public class CameraActivity extends AppCompatActivity {
         Button btnDisease = findViewById(R.id.btnDisease);
         ImageButton btnCamera = findViewById(R.id.btnCamera);
 
-        resultDialogBuilder = new AlertDialog.Builder(this);
+        permissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (isGranted) {
+                        takePictureLauncher.launch(null);
+                    } else {
+                        Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+
+        takePictureLauncher = registerForActivityResult(
+                new ActivityResultContracts.TakePicturePreview(),
+                image -> {
+                    if (image == null) {
+                        Toast.makeText(this, "No image captured", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    Bitmap processedImage = image;
+                    int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
+                    processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
+                    processedImage = Bitmap.createScaledBitmap(processedImage, imageSize, imageSize, false);
+
+                    try {
+                        ImageClassifier.ImageClassifierOptions options =
+                                ImageClassifier.ImageClassifierOptions.builder()
+                                        .setBaseOptions(BaseOptions.builder().build())
+                                        .setMaxResults(1)
+                                        .build();
+
+                        String modelFile = currentMode.equals("BREED")
+                                ? "model.tflite"
+                                : "diseasemodel.tflite";
+
+                        ImageClassifier classifier =
+                                ImageClassifier.createFromFileAndOptions(this, modelFile, options);
+
+                        List<Classifications> results =
+                                classifier.classify(TensorImage.fromBitmap(processedImage));
+
+                        if (results == null || results.isEmpty()
+                                || results.get(0).getCategories().isEmpty()) {
+                            Toast.makeText(this, "No prediction result", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        Classifications classification = results.get(0);
+                        String label = classification.getCategories().get(0).getLabel();
+
+                        String info = currentMode.equals("BREED")
+                                ? getCareInfo(label)
+                                : getDiseaseInfo(label);
+
+                        String title = currentMode.equals("BREED")
+                                ? "Detected Breed"
+                                : "Detected Disease";
+
+                        new AlertDialog.Builder(this)
+                                .setTitle(title)
+                                .setMessage(label + "\n\n" + info)
+                                .setPositiveButton("OK", null)
+                                .show();
+
+                    } catch (Exception e) {
+                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                }
+        );
 
         btnBreed.setOnClickListener(v -> {
             currentMode = "BREED";
@@ -139,28 +137,23 @@ public class CameraActivity extends AppCompatActivity {
     private void openCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
-            takePictureActivityResultLauncher.launch(null);
+            takePictureLauncher.launch(null);
         } else {
-            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
+            permissionLauncher.launch(Manifest.permission.CAMERA);
         }
     }
 
     private String getCareInfo(String breed) {
         switch (breed.toLowerCase()) {
-
             case "new zealand":
                 return "Large cage\nHay unlimited\nPellets 1/2–1 cup";
-
             case "lionhead":
                 return "Groom often\nHay unlimited\nPellets 1/4–1/2 cup";
-
-            case "holland":
             case "holland lop":
+            case "holland":
                 return "Needs playtime\nHay unlimited\nPellets 1/4 cup";
-
             case "californian":
                 return "Clean space\nHay unlimited\nPellets 1/2–1 cup";
-
             default:
                 return "Basic rabbit care";
         }
@@ -168,19 +161,14 @@ public class CameraActivity extends AppCompatActivity {
 
     private String getDiseaseInfo(String disease) {
         switch (disease.toLowerCase()) {
-
             case "myxomatosis":
                 return "Isolate immediately\nVet ASAP";
-
             case "mites":
                 return "Parasites\nUse anti-mite treatment";
-
             case "malocclusion":
                 return "Dental issue\nNeeds vet trimming";
-
             case "pasteurellosis":
                 return "Bacterial infection\nNeeds antibiotics";
-
             default:
                 return "Consult veterinarian";
         }

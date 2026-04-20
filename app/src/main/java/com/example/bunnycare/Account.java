@@ -11,7 +11,8 @@ import com.google.firebase.firestore.*;
 
 public class Account extends Fragment {
 
-    AutoCompleteTextView txtUsername, txtEmail, txtBreed, txtRole;
+    EditText txtUsername, txtEmail, txtBreed;
+    TextView txtRole;
     Button btnSave, btnDiscard;
     ImageView menuIcon;
 
@@ -23,10 +24,6 @@ public class Account extends Fragment {
 
     public Account() {}
 
-    public static Fragment newInstance() {
-        return null;
-    }
-
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
@@ -37,27 +34,26 @@ public class Account extends Fragment {
         txtEmail = view.findViewById(R.id.accountEmail);
         txtBreed = view.findViewById(R.id.accountBreed);
         txtRole = view.findViewById(R.id.accountRole);
+
         btnSave = view.findViewById(R.id.btnSave);
         btnDiscard = view.findViewById(R.id.btnDiscard);
         menuIcon = view.findViewById(R.id.menuIcon);
 
-        String[] roles = {"Rabbit Owner"};
-        ArrayAdapter<String> roleAdapter = new ArrayAdapter<>(
-                getContext(),
-                android.R.layout.simple_dropdown_item_1line,
-                roles
-        );
-        txtRole.setAdapter(roleAdapter);
-        txtRole.setText("Rabbit Owner", false);
+        txtRole.setText("Rabbit Owner");
 
         String[] breeds = {"Lionhead", "Californian", "New Zealand", "Holland"};
-        ArrayAdapter<String> breedAdapter = new ArrayAdapter<>(
-                getContext(),
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                requireContext(),
                 android.R.layout.simple_dropdown_item_1line,
                 breeds
         );
-        txtBreed.setAdapter(breedAdapter);
-        txtBreed.setThreshold(1);
+
+        txtBreed.setOnClickListener(v -> {
+            AutoCompleteTextView auto = (AutoCompleteTextView) txtBreed;
+            auto.setAdapter(adapter);
+            auto.showDropDown();
+        });
 
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
@@ -68,46 +64,47 @@ public class Account extends Fragment {
                     .get()
                     .addOnSuccessListener(doc -> {
                         if (doc.exists()) {
+
                             String username = doc.getString("username");
                             String email = doc.getString("email");
                             String breed = doc.getString("breed");
-                            String role = doc.getString("role");
 
                             txtUsername.setText(username);
                             txtEmail.setText(email);
-                            txtBreed.setText(breed, false);
-                            txtRole.setText("Rabbit Owner", false);
+                            txtBreed.setText(breed);
 
-                            originalUser = new User(username, email, breed, role);
+                            txtRole.setText("Rabbit Owner");
+
+                            originalUser = new User(username, email, breed, "Rabbit Owner");
                         }
                     });
         }
 
         btnSave.setOnClickListener(v -> {
-            if (user != null) {
-                User updatedUser = new User(
-                        txtUsername.getText().toString(),
-                        txtEmail.getText().toString(),
-                        txtBreed.getText().toString(),
-                        "Rabbit Owner"
-                );
 
-                db.collection("users").document(user.getUid())
-                        .set(updatedUser)
-                        .addOnSuccessListener(a -> {
-                            Toast.makeText(getActivity(), "Saved!", Toast.LENGTH_SHORT).show();
-                            originalUser = updatedUser;
-                        });
-            }
+            if (user == null) return;
+
+            User updatedUser = new User(
+                    txtUsername.getText().toString(),
+                    txtEmail.getText().toString(),
+                    txtBreed.getText().toString(),
+                    "Rabbit Owner"
+            );
+
+            db.collection("users").document(user.getUid())
+                    .set(updatedUser)
+                    .addOnSuccessListener(a ->
+                            Toast.makeText(getContext(), "Saved!", Toast.LENGTH_SHORT).show()
+                    );
         });
 
         btnDiscard.setOnClickListener(v -> {
-            if (originalUser != null) {
-                txtUsername.setText(originalUser.getUsername());
-                txtEmail.setText(originalUser.getEmail());
-                txtBreed.setText(originalUser.getBreed(), false);
-                txtRole.setText("Rabbit Owner", false);
-            }
+            if (originalUser == null) return;
+
+            txtUsername.setText(originalUser.getUsername());
+            txtEmail.setText(originalUser.getEmail());
+            txtBreed.setText(originalUser.getBreed());
+            txtRole.setText("Rabbit Owner");
         });
 
         menuIcon.setOnClickListener(v -> showMenu(v));
@@ -116,25 +113,28 @@ public class Account extends Fragment {
     }
 
     private void showMenu(View view) {
-        PopupMenu popup = new PopupMenu(getContext(), view);
+
+        PopupMenu popup = new PopupMenu(requireContext(), view);
         popup.inflate(R.menu.menu_account);
 
         popup.setOnMenuItemClickListener(item -> {
 
-            if (item.getItemId() == R.id.menu_logout) {
+            int id = item.getItemId();
+
+            if (id == R.id.menu_logout) {
                 mAuth.signOut();
                 startActivity(new Intent(getActivity(), Login.class));
-                getActivity().finish();
+                requireActivity().finish();
                 return true;
             }
 
-            if (item.getItemId() == R.id.menu_verify_account) {
+            if (id == R.id.menu_verify_account) {
                 startActivity(new Intent(getActivity(), Login.class));
-                getActivity().finish();
+                requireActivity().finish();
                 return true;
             }
 
-            if (item.getItemId() == R.id.menu_qr) {
+            if (id == R.id.menu_qr) {
                 startActivity(new Intent(getActivity(), QRActivity.class));
                 return true;
             }
