@@ -8,7 +8,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
-
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -97,6 +96,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                             db.collection("posts").document(postId)
                                     .update("likesCount", FieldValue.increment(-1));
                         } else {
+
                             Map<String, Object> like = new HashMap<>();
                             like.put("uid", uid);
 
@@ -112,34 +112,36 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                             db.collection("users").document(uid)
                                     .get()
                                     .addOnSuccessListener(userDoc -> {
+
                                         String username;
 
                                         if (userDoc.exists()) {
                                             String name = userDoc.getString("username");
-                                            if (name != null) username = name;
-                                            else {
-                                                username = "Unknown";
-                                            }
+                                            username = name != null ? name : "Unknown";
                                         } else {
                                             username = "Unknown";
                                         }
 
-                                        // Add Notif
                                         db.collection("posts")
-                                                .document(postId).get()
+                                                .document(postId)
+                                                .get()
                                                 .addOnSuccessListener(originalPost -> {
-                                                    Map<String, Object> notification = new HashMap<>();
-                                                    notification.put("toUserId", originalPost.get("posterId"));
-                                                    notification.put("fromUserName", username);
-                                                    notification.put("type", "like");
-                                                    notification.put("postText", originalPost.get("post"));
-                                                    notification.put("timestamp", FieldValue.serverTimestamp());
 
-                                                    db.collection("notifications").add(notification);
+                                                    String posterId = originalPost.getString("posterId");
+
+                                                    if (posterId != null && !posterId.equals(uid)) {
+
+                                                        Map<String, Object> notification = new HashMap<>();
+                                                        notification.put("toUserId", posterId);
+                                                        notification.put("fromUserName", username);
+                                                        notification.put("type", "like");
+                                                        notification.put("postText", originalPost.get("post"));
+                                                        notification.put("timestamp", FieldValue.serverTimestamp());
+
+                                                        db.collection("notifications").add(notification);
+                                                    }
                                                 });
                                     });
-
-
                         }
                     });
         });
@@ -155,21 +157,13 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
             report.put("reportedBy", uid);
             report.put("timestamp", FieldValue.serverTimestamp());
 
-            // Prevent duplicate reports
             db.collection("reports")
                     .document(postId + "_" + uid)
                     .set(report)
-                    .addOnSuccessListener(doc -> {
-                        Toast.makeText(context, "Post reported", Toast.LENGTH_SHORT).show();
-                    })
-                    .addOnFailureListener(e -> {
-                        Toast.makeText(context, "Failed to report", Toast.LENGTH_SHORT).show();
-                    });
+                    .addOnSuccessListener(doc -> Toast.makeText(context, "Post reported", Toast.LENGTH_SHORT).show())
+                    .addOnFailureListener(e -> Toast.makeText(context, "Failed to report", Toast.LENGTH_SHORT).show());
         });
 
-        // =========================
-        // COMMENT SYSTEM
-        // =========================
         holder.commentBtn.setOnClickListener(v -> {
 
             BottomSheetDialog dialog = new BottomSheetDialog(context);
@@ -220,10 +214,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
                             if (userDoc.exists()) {
                                 String name = userDoc.getString("username");
-                                if (name != null) username = name;
-                                else {
-                                    username = "Unknown";
-                                }
+                                username = name != null ? name : "Unknown";
                             } else {
                                 username = "Unknown";
                             }
@@ -247,24 +238,29 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                                         input.setText("");
                                     });
 
-                            // Add Notif
                             db.collection("posts")
-                                    .document(postId).get()
+                                    .document(postId)
+                                    .get()
                                     .addOnSuccessListener(originalPost -> {
-                                        Map<String, Object> notification = new HashMap<>();
-                                        notification.put("toUserId", originalPost.get("posterId"));
-                                        notification.put("fromUserName", username);
-                                        notification.put("type", "comment");
-                                        notification.put("postText", originalPost.get("post"));
-                                        notification.put("timestamp", FieldValue.serverTimestamp());
 
-                                        db.collection("notifications").add(notification);
+                                        String posterId = originalPost.getString("posterId");
+
+                                        if (posterId != null && !posterId.equals(uid)) {
+
+                                            Map<String, Object> notification = new HashMap<>();
+                                            notification.put("toUserId", posterId);
+                                            notification.put("fromUserName", username);
+                                            notification.put("type", "comment");
+                                            notification.put("postText", originalPost.get("post"));
+                                            notification.put("timestamp", FieldValue.serverTimestamp());
+
+                                            db.collection("notifications").add(notification);
+                                        }
                                     });
 
                         });
             });
 
-            // REALTIME COMMENT COUNT
             db.collection("posts").document(postId)
                     .addSnapshotListener((value, error) -> {
                         if (value != null && value.exists()) {

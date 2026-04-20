@@ -79,11 +79,21 @@ public class Camera extends Fragment {
 
                     try {
 
-                        ImageClassifier.ImageClassifierOptions options =
-                                ImageClassifier.ImageClassifierOptions.builder()
-                                        .setBaseOptions(BaseOptions.builder().build())
-                                        .setMaxResults(1)
-                                        .build();
+                        ImageClassifier.ImageClassifierOptions options;
+
+                        if (currentMode.equals("BREED")) {
+                            options = ImageClassifier.ImageClassifierOptions.builder()
+                                    .setBaseOptions(BaseOptions.builder().build())
+                                    .setMaxResults(1)
+                                    .setScoreThreshold(0.95f)
+                                    .build();
+                        } else {
+                            options = ImageClassifier.ImageClassifierOptions.builder()
+                                    .setBaseOptions(BaseOptions.builder().build())
+                                    .setMaxResults(1)
+                                    .setScoreThreshold(0.95f)
+                                    .build();
+                        }
 
                         String modelFile = currentMode.equals("BREED")
                                 ? "model.tflite"
@@ -157,32 +167,71 @@ public class Camera extends Fragment {
 
     private String getCareInfo(String breed) {
         switch (breed.toLowerCase()) {
+
             case "new zealand":
-                return "Hay unlimited\nPellets 1/2 cup";
+                return "🐰 Breed: New Zealand\n\n" +
+                        "🥕 Diet:\n- Unlimited hay (Timothy/Grass)\n- 1/2 cup pellets daily\n- Fresh leafy vegetables\n\n" +
+                        "🏠 Care:\n- Spacious cage with proper ventilation\n- Daily exercise (1–2 hours)\n\n" +
+                        "⚠️ Notes:\n- Fast growers, monitor weight\n- Ensure constant clean water";
+
             case "lionhead":
-                return "Regular grooming\nHay unlimited";
+                return "🐰 Breed: Lionhead\n\n" +
+                        "🥕 Diet:\n- Unlimited hay\n- Small portion of pellets\n- Fresh greens daily\n\n" +
+                        "🏠 Care:\n- Requires frequent grooming (long fur)\n- Keep fur clean to avoid matting\n\n" +
+                        "⚠️ Notes:\n- Prone to hair ingestion → provide fiber-rich diet";
+
             case "holland":
             case "holland lop":
-                return "Playtime needed\nHay unlimited";
+                return "🐰 Breed: Holland Lop\n\n" +
+                        "🥕 Diet:\n- Unlimited hay\n- Controlled pellets (1/4–1/2 cup)\n\n" +
+                        "🏠 Care:\n- Needs daily playtime and interaction\n- Clean ears regularly (lop ears prone to infection)\n\n" +
+                        "⚠️ Notes:\n- Avoid overfeeding → prone to obesity";
+
             case "california":
-                return "Clean cage\nBalanced diet";
+                return "🐰 Breed: California\n\n" +
+                        "🥕 Diet:\n- Balanced diet (hay + pellets + vegetables)\n\n" +
+                        "🏠 Care:\n- Keep cage clean and dry\n- Provide cool environment (heat sensitive)\n\n" +
+                        "⚠️ Notes:\n- Check fur and skin regularly";
+
             default:
-                return "Basic rabbit care";
+                return "🐰 General Rabbit Care\n\n" +
+                        "🥕 Diet:\n- Unlimited hay\n- Fresh vegetables\n- Limited pellets\n\n" +
+                        "🏠 Care:\n- Clean cage regularly\n- Provide exercise daily\n\n" +
+                        "⚠️ Notes:\n- Always provide clean water";
         }
     }
 
     private String getDiseaseInfo(String disease) {
         switch (disease.toLowerCase()) {
+
             case "myxomatosis":
-                return "Isolate + Vet";
+                return "🦠 Disease: Myxomatosis\n\n" +
+                        "⚠️ Symptoms:\n- Swelling (eyes, face)\n- Lethargy\n\n" +
+                        "💊 Treatment:\n- No direct cure\n- Immediate isolation\n- Supportive veterinary care\n\n" +
+                        "🏠 Action:\n- Keep rabbit warm\n- Disinfect environment\n\n" +
+                        "🚨 Urgent: Visit veterinarian immediately";
+
             case "mites":
-                return "Anti-parasitic treatment";
+                return "🦠 Condition: Mites\n\n" +
+                        "⚠️ Symptoms:\n- Scratching\n- Hair loss\n- Skin flakes\n\n" +
+                        "💊 Treatment:\n- Anti-parasitic medication (Ivermectin)\n\n" +
+                        "🏠 Action:\n- Clean cage thoroughly\n- Isolate affected rabbit\n\n" +
+                        "✔️ Good prognosis if treated early";
+
             case "malocclusion":
-                return "Dental care needed";
+                return "🦠 Condition: Malocclusion\n\n" +
+                        "⚠️ Symptoms:\n- Overgrown teeth\n- Difficulty eating\n\n" +
+                        "💊 Treatment:\n- Regular dental trimming\n- Vet intervention required\n\n" +
+                        "🥕 Diet Support:\n- High-fiber hay to naturally wear teeth\n\n" +
+                        "🚨 Requires long-term management";
+
             case "pasteurellosis":
-                return "Antibiotics required";
-            default:
-                return "Consult vet";
+                return "🦠 Disease: Pasteurellosis (Snuffles)\n\n" +
+                        "⚠️ Symptoms:\n- Runny nose\n- Sneezing\n- Breathing difficulty\n\n" +
+                        "💊 Treatment:\n- Antibiotics (vet prescribed)\n\n" +
+                        "🏠 Action:\n- Keep environment clean\n- Reduce stress\n\n" +
+                        "🚨 Seek veterinary care";
         }
+        return "";
     }
 }
