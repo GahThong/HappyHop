@@ -8,7 +8,6 @@ import android.graphics.Bitmap;
 import android.media.ThumbnailUtils;
 import android.os.Bundle;
 
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
@@ -37,42 +36,58 @@ public class Camera extends Fragment {
     final int CAMERA_REQUEST_CODE = 1808;
     int imageSize = 224;
 
-    AlertDialog.Builder breedResultDialogBuilder;
-    AlertDialog breedResultDialog;
+    AlertDialog.Builder resultDialogBuilder;
+    AlertDialog resultDialog;
+
+    String currentMode = "BREED";
 
     ActivityResultLauncher<Void> takePictureActivityResultLauncher =
             registerForActivityResult(new ActivityResultContracts.TakePicturePreview(),
-                    new ActivityResultCallback<Bitmap>() {
-                        @Override
-                        public void onActivityResult(Bitmap image) {
+                    image -> {
 
-                            if (image == null) {
-                                Toast.makeText(getActivity(), "No image captured", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
+                        if (image == null) {
+                            Toast.makeText(getActivity(), "No image captured", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
 
-                            Bitmap processedImage = image;
-                            int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
-                            processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
-                            processedImage = Bitmap.createScaledBitmap(processedImage, imageSize, imageSize, false);
 
-                            try {
-                                // ✅ YOUR ORIGINAL SETTINGS (UNCHANGED)
-                                ImageClassifier.ImageClassifierOptions options =
-                                        ImageClassifier.ImageClassifierOptions.builder()
-                                                .setBaseOptions(BaseOptions.builder().useGpu().build())
-                                                .setMaxResults(1)
-                                                .setScoreThreshold(0.99f)
-                                                .build();
+                        Bitmap processedImage = image;
+                        int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
+                        processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
+                        processedImage = Bitmap.createScaledBitmap(processedImage, imageSize, imageSize, false);
 
-                                ImageClassifier imageClassifier =
-                                        ImageClassifier.createFromFileAndOptions(
-                                                getActivity(), "model.tflite", options);
+                        try {
 
-                                List<Classifications> results =
-                                        imageClassifier.classify(TensorImage.fromBitmap(processedImage));
 
-                                Classifications classification = results.get(0);
+                            ImageClassifier.ImageClassifierOptions options =
+                                    ImageClassifier.ImageClassifierOptions.builder()
+                                            .setBaseOptions(BaseOptions.builder().useGpu().build())
+                                            .setMaxResults(1)
+                                            .setScoreThreshold(0.90f)
+                                            .build();
+
+
+                            String modelFile = currentMode.equals("BREED")
+                                    ? "model.tflite"
+                                    : "diseasemodel.tflite";
+
+                            ImageClassifier imageClassifier =
+                                    ImageClassifier.createFromFileAndOptions(
+                                            getActivity(), modelFile, options);
+
+                            List<Classifications> results =
+                                    imageClassifier.classify(TensorImage.fromBitmap(processedImage));
+
+                            Classifications classification = results.get(0);
+
+                            int index = classification.getCategories().get(0).getIndex();
+                            float confidence = classification.getCategories().get(0).getScore();
+
+                            String result;
+                            String info;
+
+
+                            if (currentMode.equals("BREED")) {
 
                                 String[] classes = {
                                         "New Zealand",
@@ -82,23 +97,45 @@ public class Camera extends Fragment {
                                         "Unknown"
                                 };
 
-                                String result = classes[
-                                        classification.getCategories().get(0).getIndex()
-                                        ];
+                                if (index >= classes.length) index = classes.length - 1;
 
-                                String careInfo = getCareInfo(result);
+                                result = classes[index];
+                                info = getCareInfo(result);
 
-                                breedResultDialogBuilder
+                                resultDialogBuilder
                                         .setTitle("Detected Breed")
-                                        .setMessage("Breed: " + result + "\n\n" + careInfo)
+                                        .setMessage("Breed: " + result +
+                                                "\n\n" + info)
                                         .setPositiveButton("OK", null);
 
-                                breedResultDialog = breedResultDialogBuilder.create();
-                                breedResultDialog.show();
-
-                            } catch (Exception e) {
-                                Toast.makeText(getActivity(), e.getMessage(), Toast.LENGTH_LONG).show();
                             }
+                            // 🔹 DISEASE MODE
+                            else {
+
+                                String[] diseaseClasses = {
+                                        "Myxomatosis",
+                                        "Mites",
+                                        "Malocclusion",
+                                        "Pasteurellosis"
+                                };
+
+                                if (index >= diseaseClasses.length) index = diseaseClasses.length - 1;
+
+                                result = diseaseClasses[index];
+                                info = getDiseaseInfo(result);
+
+                                resultDialogBuilder
+                                        .setTitle("Detected Disease")
+                                        .setMessage("Result: " + result +
+                                                "\n\n" + info)
+                                        .setPositiveButton("OK", null);
+                            }
+
+                            resultDialog = resultDialogBuilder.create();
+                            resultDialog.show();
+
+                        } catch (Exception e) {
+                            Toast.makeText(getActivity(), e.getMessage(), Toast.LENGTH_LONG).show();
                         }
                     });
 
@@ -108,10 +145,17 @@ public class Camera extends Fragment {
         Button btnBreed = view.findViewById(R.id.btnBreed);
         Button btnDisease = view.findViewById(R.id.btnDisease);
 
-        breedResultDialogBuilder = new AlertDialog.Builder(getActivity());
+        resultDialogBuilder = new AlertDialog.Builder(getActivity());
 
-        btnBreed.setOnClickListener(v -> openCamera());
-        btnDisease.setOnClickListener(v -> openCamera());
+        btnBreed.setOnClickListener(v -> {
+            currentMode = "BREED";
+            openCamera();
+        });
+
+        btnDisease.setOnClickListener(v -> {
+            currentMode = "DISEASE";
+            openCamera();
+        });
     }
 
     private void openCamera() {
@@ -129,59 +173,45 @@ public class Camera extends Fragment {
         }
     }
 
-    // ✅ CARE + FEEDING INFO
+
     private String getCareInfo(String breed) {
         switch (breed) {
 
             case "New Zealand":
-                return "Care Tips:\n" +
-                        "• Large cage and space to move\n" +
-                        "• Moderate exercise\n\n" +
-                        "Feeding Guide:\n" +
-                        "• Hay: Unlimited\n" +
-                        "• Pellets: 1/2 to 1 cup per day\n" +
-                        "• Vegetables: 1–2 cups daily\n" +
-                        "• Water: Always available";
+                return "Care Tips:\n• Large cage\n• Moderate exercise\n\nFeeding:\n• Hay unlimited\n• Pellets 1/2–1 cup";
 
             case "Lionhead":
-                return "Care Tips:\n" +
-                        "• Frequent grooming (long fur)\n" +
-                        "• Keep in cool environment\n\n" +
-                        "Feeding Guide:\n" +
-                        "• Hay: Unlimited\n" +
-                        "• Pellets: 1/4 to 1/2 cup per day\n" +
-                        "• Vegetables: 1 cup daily\n" +
-                        "• Water: Always clean and fresh";
+                return "Care Tips:\n• Groom regularly\n• Cool environment\n\nFeeding:\n• Hay unlimited\n• Pellets 1/4–1/2 cup";
 
             case "Holland":
-                return "Care Tips:\n" +
-                        "• Needs playtime and interaction\n" +
-                        "• Small but active\n\n" +
-                        "Feeding Guide:\n" +
-                        "• Hay: Unlimited\n" +
-                        "• Pellets: 1/4 cup per day\n" +
-                        "• Vegetables: 1 cup daily\n" +
-                        "• Water: Always available";
+                return "Care Tips:\n• Needs playtime\n\nFeeding:\n• Hay unlimited\n• Pellets 1/4 cup";
 
             case "Californian":
-                return "Care Tips:\n" +
-                        "• Keep clean and cool space\n" +
-                        "• Monitor weight regularly\n\n" +
-                        "Feeding Guide:\n" +
-                        "• Hay: Unlimited\n" +
-                        "• Pellets: 1/2 to 1 cup per day\n" +
-                        "• Vegetables: 1–2 cups daily\n" +
-                        "• Water: Always available";
+                return "Care Tips:\n• Clean environment\n\nFeeding:\n• Hay unlimited\n• Pellets 1/2–1 cup";
 
             default:
-                return "Care Tips:\n" +
-                        "• Keep environment clean\n" +
-                        "• Provide safe housing\n\n" +
-                        "Feeding Guide:\n" +
-                        "• Hay: Unlimited\n" +
-                        "• Pellets: 1/4 to 1/2 cup per day\n" +
-                        "• Vegetables: 1 cup daily\n" +
-                        "• Water: Always available";
+                return "Basic rabbit care applies.";
+        }
+    }
+
+
+    private String getDiseaseInfo(String disease) {
+        switch (disease) {
+
+            case "Myxomatosis":
+                return "⚠ Serious viral disease\n\nSymptoms:\n• Swollen eyes\n• Lethargy\n\nAction:\n• Isolate immediately\n• Vet ASAP";
+
+            case "Mites":
+                return "Parasite infection\n\nSymptoms:\n• Itching\n• Hair loss\n\nTreatment:\n• Anti-mite meds\n• Clean cage";
+
+            case "Malocclusion":
+                return "Dental issue\n\nSymptoms:\n• Overgrown teeth\n• Difficulty eating\n\nTreatment:\n• Vet trimming\n• Chew toys";
+
+            case "Pasteurellosis":
+                return "Bacterial infection\n\nSymptoms:\n• Runny nose\n• Sneezing\n\nTreatment:\n• Antibiotics\n• Clean area";
+
+            default:
+                return "Unknown disease.\nConsult a veterinarian.";
         }
     }
 
