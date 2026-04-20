@@ -108,6 +108,38 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
                             db.collection("posts").document(postId)
                                     .update("likesCount", FieldValue.increment(1));
+
+                            db.collection("users").document(uid)
+                                    .get()
+                                    .addOnSuccessListener(userDoc -> {
+                                        String username;
+
+                                        if (userDoc.exists()) {
+                                            String name = userDoc.getString("username");
+                                            if (name != null) username = name;
+                                            else {
+                                                username = "Unknown";
+                                            }
+                                        } else {
+                                            username = "Unknown";
+                                        }
+
+                                        // Add Notif
+                                        db.collection("posts")
+                                                .document(postId).get()
+                                                .addOnSuccessListener(originalPost -> {
+                                                    Map<String, Object> notification = new HashMap<>();
+                                                    notification.put("toUserId", originalPost.get("posterId"));
+                                                    notification.put("fromUserName", username);
+                                                    notification.put("type", "like");
+                                                    notification.put("postText", originalPost.get("post"));
+                                                    notification.put("timestamp", FieldValue.serverTimestamp());
+
+                                                    db.collection("notifications").add(notification);
+                                                });
+                                    });
+
+
                         }
                     });
         });
@@ -184,17 +216,22 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                         .get()
                         .addOnSuccessListener(userDoc -> {
 
-                            String username = "Unknown";
+                            String username;
 
                             if (userDoc.exists()) {
-                                String name = userDoc.getString("userName");
+                                String name = userDoc.getString("username");
                                 if (name != null) username = name;
+                                else {
+                                    username = "Unknown";
+                                }
+                            } else {
+                                username = "Unknown";
                             }
 
                             Map<String, Object> comment = new HashMap<>();
                             comment.put("text", text);
                             comment.put("uid", uid);
-                            comment.put("userName", username);
+                            comment.put("username", username);
                             comment.put("timestamp", FieldValue.serverTimestamp());
 
                             db.collection("posts")
@@ -209,6 +246,21 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
                                         input.setText("");
                                     });
+
+                            // Add Notif
+                            db.collection("posts")
+                                    .document(postId).get()
+                                    .addOnSuccessListener(originalPost -> {
+                                        Map<String, Object> notification = new HashMap<>();
+                                        notification.put("toUserId", originalPost.get("posterId"));
+                                        notification.put("fromUserName", username);
+                                        notification.put("type", "comment");
+                                        notification.put("postText", originalPost.get("post"));
+                                        notification.put("timestamp", FieldValue.serverTimestamp());
+
+                                        db.collection("notifications").add(notification);
+                                    });
+
                         });
             });
 

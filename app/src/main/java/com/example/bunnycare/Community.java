@@ -100,7 +100,7 @@ public class Community extends Fragment {
                     adapter.notifyDataSetChanged();
                 });
 
-        ImageButton newPostButton = view.findViewById(R.id.newPost);
+        Button newPostButton = view.findViewById(R.id.newPost);
 
         newPostButton.setOnClickListener(v -> {
 
