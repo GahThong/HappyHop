@@ -41,7 +41,6 @@
         <activity android:name=".Login" android:exported="false" />
         <activity android:name=".CameraActivity" android:exported="true" />
         <activity android:name=".NotificationActivity" android:exported="false" />
-        <activity android:name=".MapActivity" android:exported="false" />
         <activity android:name=".CommunityActivity" android:exported="false" />
         <activity android:name=".AccountActivity" android:exported="false" />
         <activity android:name=".QRActivity" android:exported="false" />
