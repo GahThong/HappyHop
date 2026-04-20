@@ -18,12 +18,12 @@
         android:layout_height="wrap_content"/>
 </LinearLayout>
 
-    <ImageButton
+    <Button
         android:id="@+id/newPost"
         android:layout_width="match_parent"
         android:layout_height="60sp"
         android:layout_margin="10sp"
-        android:text="New Post"
+        android:text="Add Post"
         android:textSize="16sp"
         android:visibility="visible" />
 
