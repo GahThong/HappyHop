@@ -19,12 +19,13 @@
 </LinearLayout>
 
     <ImageButton
+        android:id="@+id/newPost"
         android:layout_width="match_parent"
         android:layout_height="60sp"
         android:layout_margin="10sp"
-        android:id="@+id/newPost"
         android:text="New Post"
-        android:textSize="16sp"/>
+        android:textSize="16sp"
+        android:visibility="visible" />
 
 
     </LinearLayout>

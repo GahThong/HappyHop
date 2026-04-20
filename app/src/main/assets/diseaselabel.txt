@@ -1,0 +1,4 @@
+0 Myxomatosis
+1 Mites
+2 Malocclusion
+3 Pasteurellosis

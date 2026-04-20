@@ -11,8 +11,7 @@ import com.google.firebase.firestore.*;
 
 public class Account extends Fragment {
 
-    EditText txtUsername, txtEmail, txtBreed;
-    AutoCompleteTextView txtRole;
+    AutoCompleteTextView txtUsername, txtEmail, txtBreed, txtRole;
     Button btnSave, btnDiscard;
     ImageView menuIcon;
 
@@ -42,10 +41,23 @@ public class Account extends Fragment {
         btnDiscard = view.findViewById(R.id.btnDiscard);
         menuIcon = view.findViewById(R.id.menuIcon);
 
-        String[] roles = {"Pet Owner", "Vet"};
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
-                android.R.layout.simple_dropdown_item_1line, roles);
-        txtRole.setAdapter(adapter);
+        String[] roles = {"Rabbit Owner"};
+        ArrayAdapter<String> roleAdapter = new ArrayAdapter<>(
+                getContext(),
+                android.R.layout.simple_dropdown_item_1line,
+                roles
+        );
+        txtRole.setAdapter(roleAdapter);
+        txtRole.setText("Rabbit Owner", false);
+
+        String[] breeds = {"Lionhead", "Californian", "New Zealand", "Holland"};
+        ArrayAdapter<String> breedAdapter = new ArrayAdapter<>(
+                getContext(),
+                android.R.layout.simple_dropdown_item_1line,
+                breeds
+        );
+        txtBreed.setAdapter(breedAdapter);
+        txtBreed.setThreshold(1);
 
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
@@ -63,8 +75,8 @@ public class Account extends Fragment {
 
                             txtUsername.setText(username);
                             txtEmail.setText(email);
-                            txtBreed.setText(breed);
-                            txtRole.setText(role, false);
+                            txtBreed.setText(breed, false);
+                            txtRole.setText("Rabbit Owner", false);
 
                             originalUser = new User(username, email, breed, role);
                         }
@@ -77,7 +89,7 @@ public class Account extends Fragment {
                         txtUsername.getText().toString(),
                         txtEmail.getText().toString(),
                         txtBreed.getText().toString(),
-                        txtRole.getText().toString()
+                        "Rabbit Owner"
                 );
 
                 db.collection("users").document(user.getUid())
@@ -93,8 +105,8 @@ public class Account extends Fragment {
             if (originalUser != null) {
                 txtUsername.setText(originalUser.getUsername());
                 txtEmail.setText(originalUser.getEmail());
-                txtBreed.setText(originalUser.getBreed());
-                txtRole.setText(originalUser.getRole(), false);
+                txtBreed.setText(originalUser.getBreed(), false);
+                txtRole.setText("Rabbit Owner", false);
             }
         });
 
