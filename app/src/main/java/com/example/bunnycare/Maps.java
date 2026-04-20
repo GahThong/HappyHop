@@ -38,13 +38,28 @@ public class Maps extends Fragment {
 
     private final int REQUEST_PERMISSIONS_REQUEST_CODE = 1;
 
+    private Marker userMarker;
 
     class Vet {
         double lat;
         double lng;
         String name;
+        double distance;
 
         Vet(double lat, double lng, String name) {
+            this.lat = lat;
+            this.lng = lng;
+            this.name = name;
+        }
+    }
+
+    class FeedSeller {
+        double lat;
+        double lng;
+        String name;
+        double distance;
+
+        FeedSeller(double lat, double lng, String name) {
             this.lat = lat;
             this.lng = lng;
             this.name = name;
@@ -89,87 +104,44 @@ public class Maps extends Fragment {
                 Manifest.permission.ACCESS_FINE_LOCATION
         });
 
-
         mapController.setZoom(10.0);
 
-        loadVets();
         getCurrentLocation();
+
+        mapView.setOnClickListener(v -> {
+            mapController.animateTo(mapView.getMapCenter());
+            mapController.setZoom(15.0);
+        });
     }
 
+    private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        double R = 6371000;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lat2 - lon1);
 
-    private void loadVets() {
+        double a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                        Math.cos(Math.toRadians(lat1)) *
+                                Math.cos(Math.toRadians(lat2)) *
+                                Math.sin(dLon / 2) *
+                                Math.sin(dLon / 2);
 
-        List<Vet> vets = new ArrayList<>();
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
 
-
-        vets.add(new Vet(
-                14.66864878815696, 120.54425441716226,
-                "Easyvet Cupang Branch - Pet Supplies & Veterinary Services"
-        ));
-
-        vets.add(new Vet(
-                14.674436487056353, 120.54718269535796,
-                "PENINSULA VETERINARY CLINIC"
-        ));
-        vets.add(new Vet(
-                14.678788762953449, 120.54162734120344,
-                "Man´s Best Friend Veterinary Clinics"
-        ));
-        vets.add(new Vet(
-                14.681817404737464, 120.54355199074746,
-                "Pet Hub Veterinary Hospital - Bataan"
-        ));
-        vets.add(new Vet(
-                14.684225208214851, 120.53775841911424,
-                "Veterinary Clinic at PE SM Bataan"
-        ));
-        vets.add(new Vet(
-                14.686466932444512, 120.53951794827692,
-                "ABC Animal Bite Center - Balanga, Bataan"
-        ));
-        vets.add(new Vet(
-                14.704648957282709, 120.5375867578363,
-                "Bfc Animal Clinic & Grooming Center"
-        ));
-        vets.add(new Vet(
-                14.678788762953449, 120.54162734120344,
-                "PENINSULA VETERINARY CLINIC"
-        ));
-        vets.add(new Vet(
-                14.677043233369728, 120.5359559748471,
-                "Pet Needs Veterinary Care and Grooming Center"
-        ));
-        vets.add(new Vet(
-                14.678579282525043, 120.52784497456055,
-                "PETSTOP ANIMAL CLINIC AND GROOMING CENTER"
-        ));
-        vets.add(new Vet(
-                14.672808663549786, 120.527501651784,
-                "Easyvet Balanga Main Branch - Pet Supplies, Grooming & Veterinary Services"
-        ));
-
-        Drawable icon = ContextCompat.getDrawable(
-                getActivity(),
-                org.osmdroid.library.R.drawable.marker_default
-        );
-
-        FolderOverlay vetLayer = new FolderOverlay(getActivity());
-        mapView.getOverlays().add(vetLayer);
-
+    private void sortVetsByNearest(List<Vet> vets, double userLat, double userLng) {
         for (Vet v : vets) {
+            v.distance = distanceMeters(userLat, userLng, v.lat, v.lng);
+        }
+        vets.sort((a, b) -> Double.compare(a.distance, b.distance));
+    }
 
-            GeoPoint point = new GeoPoint(v.lat, v.lng);
-
-            Marker marker = new Marker(mapView);
-            marker.setPosition(point);
-            marker.setTitle(v.name);
-            marker.setIcon(icon);
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-            vetLayer.add(marker);
+    private void computeFeedDistances(List<FeedSeller> feeds, double userLat, double userLng) {
+        for (FeedSeller f : feeds) {
+            f.distance = distanceMeters(userLat, userLng, f.lat, f.lng);
         }
     }
-
 
     private void getCurrentLocation() {
 
@@ -190,15 +162,145 @@ public class Maps extends Fragment {
 
                     if (location != null) {
 
-                        GeoPoint current = new GeoPoint(
-                                location.getLatitude(),
-                                location.getLongitude()
-                        );
+                        double userLat = location.getLatitude();
+                        double userLng = location.getLongitude();
 
-                        mapController.setCenter(current);
-                        mapController.setZoom(13.0);
+                        GeoPoint userPoint = new GeoPoint(userLat, userLng);
+
+                        mapController.setCenter(userPoint);
+                        mapController.setZoom(14.0);
+
+                        showUserMarker(userPoint);
+                        loadVets(userLat, userLng);
+                        loadFeedSellers(userLat, userLng);
                     }
                 });
+    }
+
+    private void showUserMarker(GeoPoint userPoint) {
+
+        if (userMarker != null) {
+            mapView.getOverlays().remove(userMarker);
+        }
+
+        userMarker = new Marker(mapView);
+        userMarker.setPosition(userPoint);
+        userMarker.setTitle("You are here");
+
+        Drawable icon = ContextCompat.getDrawable(
+                getActivity(),
+                org.osmdroid.library.R.drawable.person
+        );
+
+        userMarker.setIcon(icon);
+        userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+
+        mapView.getOverlays().add(userMarker);
+    }
+
+    private void loadVets(double userLat, double userLng) {
+
+        List<Vet> vets = new ArrayList<>();
+
+        vets.add(new Vet(14.66864878815696, 120.54425441716226,
+                "Easyvet Cupang Branch - Pet Supplies & Veterinary Services"));
+
+        vets.add(new Vet(14.674436487056353, 120.54718269535796,
+                "PENINSULA VETERINARY CLINIC"));
+
+        vets.add(new Vet(14.678788762953449, 120.54162734120344,
+                "Man´s Best Friend Veterinary Clinics"));
+
+        vets.add(new Vet(14.681817404737464, 120.54355199074746,
+                "Pet Hub Veterinary Hospital - Bataan"));
+
+        vets.add(new Vet(14.684225208214851, 120.53775841911424,
+                "Veterinary Clinic at PE SM Bataan"));
+
+        vets.add(new Vet(14.686466932444512, 120.53951794827692,
+                "ABC Animal Bite Center"));
+
+        vets.add(new Vet(14.704648957282709, 120.5375867578363,
+                "Bfc Animal Clinic"));
+
+        vets.add(new Vet(14.678788762953449, 120.54162734120344,
+                "PENINSULA VETERINARY CLINIC"));
+
+        vets.add(new Vet(14.677043233369728, 120.5359559748471,
+                "Pet Needs Veterinary Care"));
+
+        vets.add(new Vet(14.678579282525043, 120.52784497456055,
+                "PETSTOP Animal Clinic"));
+
+        vets.add(new Vet(14.672808663549786, 120.527501651784,
+                "Easyvet Balanga Main Branch"));
+
+        sortVetsByNearest(vets, userLat, userLng);
+
+        Drawable icon = ContextCompat.getDrawable(
+                getActivity(),
+                org.osmdroid.library.R.drawable.marker_default
+        );
+
+        FolderOverlay vetLayer = new FolderOverlay(getActivity());
+        mapView.getOverlays().add(vetLayer);
+
+        for (int i = 0; i < vets.size(); i++) {
+
+            Vet v = vets.get(i);
+
+            Marker marker = new Marker(mapView);
+            marker.setPosition(new GeoPoint(v.lat, v.lng));
+
+            if (i == 0) {
+                marker.setTitle("NEAREST VET: " + v.name);
+                marker.setSnippet("NEAREST");
+            } else {
+                marker.setTitle(v.name);
+                marker.setSnippet(String.format("%.2f km away", v.distance / 1000));
+            }
+
+            marker.setIcon(icon);
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+            vetLayer.add(marker);
+        }
+    }
+
+    private void loadFeedSellers(double userLat, double userLng) {
+
+        List<FeedSeller> feeds = new ArrayList<>();
+
+        feeds.add(new FeedSeller(14.672139308142011, 120.54996505969378, "G4R Poultry Supply"));
+        feeds.add(new FeedSeller(14.678108937105124, 120.54397455803918, "JF Agrivet Supply"));
+        feeds.add(new FeedSeller(14.679714774476277, 120.54249497636003, "Bataan Farmer's Center"));
+        feeds.add(new FeedSeller(14.68285659598325, 120.54090713257439, "Vinshe Pet Store"));
+        feeds.add(new FeedSeller(14.680866780968083, 120.53545794134182, "Botchikit’s Poultry Feeds"));
+        feeds.add(new FeedSeller(14.671615648815195, 120.53675708621026, "Poultry Hub"));
+        feeds.add(new FeedSeller(14.665331637873322, 120.53361748589477, "Ava's Pet Station"));
+        feeds.add(new FeedSeller(14.676540701734748, 120.52366234271304, "MBCom Feeds Outlet"));
+
+        computeFeedDistances(feeds, userLat, userLng);
+
+        Drawable feedIcon = ContextCompat.getDrawable(
+                getActivity(),
+                org.osmdroid.library.R.drawable.marker_default
+        );
+
+        FolderOverlay feedLayer = new FolderOverlay(getActivity());
+        mapView.getOverlays().add(feedLayer);
+
+        for (FeedSeller f : feeds) {
+
+            Marker marker = new Marker(mapView);
+            marker.setPosition(new GeoPoint(f.lat, f.lng));
+            marker.setTitle("Feed: " + f.name);
+            marker.setSnippet(String.format("%.2f km away", f.distance / 1000));
+            marker.setIcon(feedIcon);
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+            feedLayer.add(marker);
+        }
     }
 
     private void requestPermissionsIfNecessary(String[] permissions) {
