@@ -58,6 +58,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
         holder.likeCount.setText(String.valueOf(post.getLikesCount()));
         holder.commentCount.setText(String.valueOf(post.getCommentCount()));
 
+        // POST IMAGE
         if (post.getPostImage() != null && !post.getPostImage().isEmpty()) {
             holder.postImage.setVisibility(View.VISIBLE);
             Glide.with(context).load(post.getPostImage()).into(holder.postImage);
@@ -65,6 +66,14 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
             holder.postImage.setVisibility(View.GONE);
         }
 
+
+        if (post.getProfileImage() != null && !post.getProfileImage().isEmpty()) {
+            Glide.with(context)
+                    .load(post.getProfileImage())
+                    .into(holder.profileImageView);
+        } else {
+            holder.profileImageView.setImageResource(R.drawable.account_user);
+        }
         String postId = post.getId();
 
         db.collection("posts").document(postId)
@@ -75,6 +84,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                     }
                 });
 
+        // LIKE
         holder.likeBtn.setOnClickListener(v -> {
 
             if (user == null) return;
@@ -146,6 +156,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                     });
         });
 
+
         holder.reportBtn.setOnClickListener(v -> {
 
             if (user == null) return;
@@ -163,6 +174,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                     .addOnSuccessListener(doc -> Toast.makeText(context, "Post reported", Toast.LENGTH_SHORT).show())
                     .addOnFailureListener(e -> Toast.makeText(context, "Failed to report", Toast.LENGTH_SHORT).show());
         });
+
 
         holder.commentBtn.setOnClickListener(v -> {
 
@@ -279,7 +291,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
         TextView userName, description, likeCount, commentCount;
-        ImageView postImage, likeBtn, commentBtn, reportBtn;
+        ImageView postImage, likeBtn, commentBtn, reportBtn, profileImageView;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -292,6 +304,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
             likeBtn = itemView.findViewById(R.id.likeBtn);
             commentBtn = itemView.findViewById(R.id.commentBtn);
             reportBtn = itemView.findViewById(R.id.reportBtn);
+            profileImageView = itemView.findViewById(R.id.profileImageView);
         }
     }
 }

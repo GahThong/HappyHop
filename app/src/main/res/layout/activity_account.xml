@@ -6,7 +6,7 @@
     android:background="@color/lavender"
     android:orientation="vertical">
 
-    <!-- App Logo -->
+
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="125dp"
@@ -15,7 +15,7 @@
         android:scaleType="centerInside"
         android:src="@drawable/logo" />
 
-    <!-- Profile container -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -25,7 +25,7 @@
         android:paddingTop="30dp"
         android:paddingBottom="20dp">
 
-        <!-- Username -->
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="300dp"
             android:layout_height="wrap_content"
@@ -44,7 +44,7 @@
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Email -->
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="300dp"
             android:layout_height="wrap_content"
@@ -64,7 +64,7 @@
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Breed -->
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="300dp"
             android:layout_height="wrap_content"
@@ -83,9 +83,7 @@
                 android:textColor="@android:color/black" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Role Dropdown -->
 
-        <!-- Buttons -->
         <AutoCompleteTextView
             android:id="@+id/accountRole"
             android:layout_width="300dp"
@@ -125,7 +123,7 @@
 
     </LinearLayout>
 
-    <!-- Bottom Navigation -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="70dp"
@@ -182,7 +180,7 @@
             android:layout_width="0dp"
             android:layout_height="50dp"
             android:layout_weight="1"
-            android:src="@drawable/google"
+            android:src="@drawable/account"
             android:background="@android:color/transparent"
             android:scaleType="fitCenter"
             android:contentDescription="account" />

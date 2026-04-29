@@ -90,7 +90,7 @@ android:background="@color/lavender">
             android:background="@android:color/transparent"
             android:contentDescription="account"
             android:scaleType="fitCenter"
-            android:src="@drawable/google" />
+            android:src="@drawable/account" />
 
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -117,7 +117,7 @@ public class Maps extends Fragment {
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
         double R = 6371000;
         double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lat2 - lon1);
+        double dLon = Math.toRadians(lon2 - lon1);
 
         double a =
                 Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -223,9 +223,6 @@ public class Maps extends Fragment {
         vets.add(new Vet(14.704648957282709, 120.5375867578363,
                 "Bfc Animal Clinic"));
 
-        vets.add(new Vet(14.678788762953449, 120.54162734120344,
-                "PENINSULA VETERINARY CLINIC"));
-
         vets.add(new Vet(14.677043233369728, 120.5359559748471,
                 "Pet Needs Veterinary Care"));
 
@@ -252,12 +249,10 @@ public class Maps extends Fragment {
             Marker marker = new Marker(mapView);
             marker.setPosition(new GeoPoint(v.lat, v.lng));
 
+            marker.setTitle(v.name);
+
             if (i == 0) {
-                marker.setTitle("NEAREST VET: " + v.name);
                 marker.setSnippet("NEAREST");
-            } else {
-                marker.setTitle(v.name);
-                marker.setSnippet(String.format("%.2f km away", v.distance / 1000));
             }
 
             marker.setIcon(icon);
@@ -294,8 +289,7 @@ public class Maps extends Fragment {
 
             Marker marker = new Marker(mapView);
             marker.setPosition(new GeoPoint(f.lat, f.lng));
-            marker.setTitle("Feed: " + f.name);
-            marker.setSnippet(String.format("%.2f km away", f.distance / 1000));
+            marker.setTitle(f.name);
             marker.setIcon(feedIcon);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 

@@ -8,7 +8,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -124,7 +123,7 @@ public class Community extends Fragment {
 
             postBtn.setOnClickListener(v2 -> {
 
-                String comment = postText.getText().toString().trim();
+                String comment = filterProfanity(postText.getText().toString().trim());
                 Uri uri = selectedUri;
 
                 if (uri != null) {
@@ -194,5 +193,23 @@ public class Community extends Fragment {
 
                     db.collection("posts").add(post);
                 });
+    }
+    private String filterProfanity(String text) {
+
+        if (text == null) return "";
+
+        String[] badWords = {
+                "fuck", "shit", "bitch", "asshole", "damn"
+        };
+
+        String filtered = text;
+
+        for (String word : badWords) {
+            String regex = "(?i)\\b" + word + "\\b";
+            String replacement = new String(new char[word.length()]).replace('\0', '*');
+            filtered = filtered.replaceAll(regex, replacement);
+        }
+
+        return filtered;
     }
 }

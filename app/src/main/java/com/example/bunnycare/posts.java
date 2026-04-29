@@ -24,7 +24,11 @@ public class posts {
         this.likesCount = likesCount;
         this.commentCount = commentCount;
     }
+    private String profileImage;
 
+    public String getProfileImage() {
+        return profileImage;
+    }
 
 
     public String getId() {

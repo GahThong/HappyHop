@@ -11,7 +11,6 @@ public class AccountActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_account_container);
 
-        // Load Account fragment
         FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         transaction.replace(R.id.accountFragmentContainer, new Account());
         transaction.commit();
