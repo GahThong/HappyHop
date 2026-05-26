@@ -5,7 +5,9 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.*;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -13,9 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
 
 import com.bumptech.glide.Glide;
-import com.cloudinary.android.MediaManager;
-import com.cloudinary.android.callback.ErrorInfo;
-import com.cloudinary.android.callback.UploadCallback;
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
 import com.google.zxing.integration.android.IntentIntegrator;
@@ -28,7 +27,6 @@ public class Account extends Fragment {
 
     EditText txtUsername, txtEmail, txtBreed;
     TextView txtRole;
-    Button btnSave, btnDiscard;
     ImageView menuIcon, profileImage;
 
     FirebaseAuth mAuth;
@@ -39,7 +37,6 @@ public class Account extends Fragment {
     String imageUrl = "";
 
     ActivityResultLauncher<Intent> imagePickerLauncher;
-    ActivityResultLauncher<Intent> medicalLauncher;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -51,11 +48,7 @@ public class Account extends Fragment {
         txtEmail = view.findViewById(R.id.accountEmail);
         txtBreed = view.findViewById(R.id.accountBreed);
         txtRole = view.findViewById(R.id.accountRole);
-
         profileImage = view.findViewById(R.id.profileImage);
-
-        btnSave = view.findViewById(R.id.btnSave);
-        btnDiscard = view.findViewById(R.id.btnDiscard);
         menuIcon = view.findViewById(R.id.menuIcon);
 
         txtRole.setText("Rabbit Owner");
@@ -71,24 +64,12 @@ public class Account extends Fragment {
                 result -> {
                     if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
                         imageUri = result.getData().getData();
-                        Glide.with(requireContext())
-                                .load(imageUri)
-                                .circleCrop()
-                                .into(profileImage);
-                    }
-                });
-
-        medicalLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                        uploadMedical(result.getData().getData());
+                        Glide.with(requireContext()).load(imageUri).circleCrop().into(profileImage);
                     }
                 });
 
         profileImage.setOnClickListener(v -> openGallery());
         menuIcon.setOnClickListener(this::showMenu);
-        btnSave.setOnClickListener(v -> saveProfile());
 
         loadUser();
 
@@ -96,22 +77,15 @@ public class Account extends Fragment {
     }
 
     private void loadUser() {
-
-        db.collection("users").document(user.getUid())
-                .get()
+        db.collection("users").document(user.getUid()).get()
                 .addOnSuccessListener(doc -> {
-
                     txtUsername.setText(doc.getString("username"));
                     txtEmail.setText(doc.getString("email"));
                     txtBreed.setText(doc.getString("breed"));
-
                     imageUrl = doc.getString("imageUrl");
 
                     if (imageUrl != null && !imageUrl.isEmpty()) {
-                        Glide.with(requireContext())
-                                .load(imageUrl)
-                                .circleCrop()
-                                .into(profileImage);
+                        Glide.with(requireContext()).load(imageUrl).circleCrop().into(profileImage);
                     }
                 });
     }
@@ -122,53 +96,7 @@ public class Account extends Fragment {
         imagePickerLauncher.launch(intent);
     }
 
-    private void uploadToCloudinary() {
-
-        if (imageUri == null) return;
-
-        MediaManager.get()
-                .upload(imageUri)
-                .unsigned("ml_default")
-                .callback(new UploadCallback() {
-
-                    @Override public void onStart(String requestId) {}
-                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
-
-                    @Override
-                    public void onSuccess(String requestId, Map resultData) {
-
-                        imageUrl = (String) resultData.get("secure_url");
-                        saveProfile();
-                    }
-
-                    @Override public void onError(String requestId, ErrorInfo error) {}
-                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
-
-                }).dispatch();
-    }
-
-    private void saveProfile() {
-
-        Map<String, Object> map = new HashMap<>();
-        map.put("username", txtUsername.getText().toString().trim());
-        map.put("email", txtEmail.getText().toString().trim());
-        map.put("breed", txtBreed.getText().toString().trim());
-        map.put("role", "Rabbit Owner");
-        map.put("imageUrl", imageUrl);
-
-        db.collection("users")
-                .document(user.getUid())
-                .set(map, SetOptions.merge())
-                .addOnSuccessListener(a ->
-                        Toast.makeText(getContext(), "Saved", Toast.LENGTH_SHORT).show()
-                )
-                .addOnFailureListener(e ->
-                        Toast.makeText(getContext(), e.getMessage(), Toast.LENGTH_LONG).show()
-                );
-    }
-
     private void showMenu(View view) {
-
         PopupMenu popup = new PopupMenu(requireContext(), view);
         popup.inflate(R.menu.menu_account);
 
@@ -178,9 +106,13 @@ public class Account extends Fragment {
 
             if (id == R.id.menu_account_setting) {
                 showAccountSettings();
-            } else if (id == R.id.menu_qr) {
+            }
+
+            if (id == R.id.menu_qr) {
                 showQRMenu();
-            } else if (id == R.id.menu_logout) {
+            }
+
+            if (id == R.id.menu_logout) {
                 mAuth.signOut();
                 startActivity(new Intent(getActivity(), Login.class));
                 requireActivity().finish();
@@ -193,83 +125,63 @@ public class Account extends Fragment {
     }
 
     private void showAccountSettings() {
-
         String[] options = {"Change Email", "Change Password"};
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Account Settings")
                 .setItems(options, (d, i) -> {
-
                     if (i == 0) changeEmail();
                     if (i == 1) changePassword();
-
                 }).show();
     }
 
     private void changeEmail() {
-
-        EditText newEmail = new EditText(getContext());
-        newEmail.setHint("New Email");
+        EditText e = new EditText(getContext());
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Change Email")
-                .setView(newEmail)
-                .setPositiveButton("Send Verification", (d, w) -> {
+                .setView(e)
+                .setPositiveButton("Send", (d, w) -> {
 
-                    String email = newEmail.getText().toString();
+                    String email = e.getText().toString();
 
                     user.verifyBeforeUpdateEmail(email)
                             .addOnSuccessListener(a -> {
-
-                                db.collection("users")
-                                        .document(user.getUid())
+                                db.collection("users").document(user.getUid())
                                         .update("email", email);
-
-                                Toast.makeText(getContext(), "Verification sent", Toast.LENGTH_LONG).show();
                             });
-
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
     private void changePassword() {
+        EditText oldP = new EditText(getContext());
+        EditText newP = new EditText(getContext());
+        EditText reP = new EditText(getContext());
 
-        LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-
-        EditText oldPass = new EditText(getContext());
-        EditText newPass = new EditText(getContext());
-        EditText retypePass = new EditText(getContext());
-
-        oldPass.setHint("Current Password");
-        newPass.setHint("New Password");
-        retypePass.setHint("Retype New Password");
-
-        layout.addView(oldPass);
-        layout.addView(newPass);
-        layout.addView(retypePass);
+        LinearLayout l = new LinearLayout(getContext());
+        l.setOrientation(LinearLayout.VERTICAL);
+        l.addView(oldP);
+        l.addView(newP);
+        l.addView(reP);
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Change Password")
-                .setView(layout)
+                .setView(l)
                 .setPositiveButton("Update", (d, w) -> {
 
-                    String oldP = oldPass.getText().toString();
-                    String newP = newPass.getText().toString();
-                    String reP = retypePass.getText().toString();
+                    if (!newP.getText().toString().equals(reP.getText().toString())) return;
 
-                    if (!newP.equals(reP)) {
-                        Toast.makeText(getContext(), "Password mismatch", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    AuthCredential c = EmailAuthProvider.getCredential(user.getEmail(), oldP);
-
-                    user.reauthenticate(c).addOnSuccessListener(a ->
-                            user.updatePassword(newP)
+                    AuthCredential c = EmailAuthProvider.getCredential(
+                            user.getEmail(),
+                            oldP.getText().toString()
                     );
 
+                    user.reauthenticate(c)
+                            .addOnSuccessListener(a ->
+                                    user.updatePassword(newP.getText().toString())
+                            );
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -277,7 +189,7 @@ public class Account extends Fragment {
 
     private void showQRMenu() {
 
-        String[] options = {"Generate QR", "Scan QR", "Upload Medical Record", "Edit QR Images"};
+        String[] options = {"Generate QR", "Scan QR"};
 
         new AlertDialog.Builder(getContext())
                 .setTitle("QR Options")
@@ -285,8 +197,6 @@ public class Account extends Fragment {
 
                     if (i == 0) generateQR();
                     if (i == 1) scanQR();
-                    if (i == 2) pickMedical();
-                    if (i == 3) editMedical();
 
                 }).show();
     }
@@ -301,56 +211,6 @@ public class Account extends Fragment {
         IntentIntegrator.forSupportFragment(this).initiateScan();
     }
 
-    private void pickMedical() {
-        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-        i.setType("image/*");
-        medicalLauncher.launch(i);
-    }
-
-    private void editMedical() {
-        Intent i = new Intent(Intent.ACTION_PICK);
-        i.setType("image/*");
-        medicalLauncher.launch(i);
-    }
-
-    private void uploadMedical(Uri uri) {
-
-        MediaManager.get().upload(uri)
-                .unsigned("ml_default")
-                .callback(new UploadCallback() {
-
-                    @Override public void onStart(String requestId) {}
-                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
-
-                    @Override
-                    public void onSuccess(String requestId, Map resultData) {
-
-                        String url = (String) resultData.get("secure_url");
-
-                        db.collection("users")
-                                .document(user.getUid())
-                                .update("medicalRecord", url);
-                    }
-
-                    @Override public void onError(String requestId, ErrorInfo error) {}
-                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
-
-                }).dispatch();
-    }
-
-    private void showMedical(String url) {
-
-        ImageView img = new ImageView(getContext());
-
-        Glide.with(requireContext()).load(url).into(img);
-
-        new AlertDialog.Builder(getContext())
-                .setTitle("Medical Record")
-                .setView(img)
-                .setPositiveButton("Close", null)
-                .show();
-    }
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
 
@@ -360,13 +220,30 @@ public class Account extends Fragment {
 
             String uid = result.getContents();
 
-            db.collection("users").document(uid)
+            db.collection("users")
+                    .document(uid)
                     .get()
                     .addOnSuccessListener(doc -> {
 
-                        String url = doc.getString("medicalRecord");
+                        String image = doc.getString("qrImage");
 
-                        if (url != null) showMedical(url);
+                        if (image == null || image.isEmpty()) {
+                            Toast.makeText(getContext(), "No image found", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        ImageView img = new ImageView(getContext());
+                        img.setAdjustViewBounds(true);
+
+                        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                                .setTitle("QR Image")
+                                .setView(img)
+                                .setPositiveButton("Close", null)
+                                .create();
+
+                        dialog.show();
+
+                        Glide.with(requireContext()).load(image).into(img);
                     });
         }
 

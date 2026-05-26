@@ -231,6 +231,12 @@ public class Maps extends Fragment {
 
         vets.add(new Vet(14.672808663549786, 120.527501651784,
                 "Easyvet Balanga Main Branch"));
+        vets.add(new Vet(14.619125, 120.563875,
+                "Salubrious Toptails Animal Clinic and Grooming Center"));
+        vets.add(new Vet(14.620938, 120.579188,
+                "BFC Animal Clinic"));
+        vets.add(new Vet(14.6657, 120.5593,
+                "Peninsula Veterinary Clinic "));
 
         sortVetsByNearest(vets, userLat, userLng);
 

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Why are you reporting this post?"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginBottom="12dp" />
+
+        <CheckBox
+            android:id="@+id/rabbitTopic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Not including rabbit topic" />
+
+        <CheckBox
+            android:id="@+id/cursingWords"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cursing words" />
+
+        <CheckBox
+            android:id="@+id/violence"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Violence" />
+
+        <CheckBox
+            android:id="@+id/hate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Hate" />
+
+        <CheckBox
+            android:id="@+id/others"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Others" />
+
+        <EditText
+            android:id="@+id/reportInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="Enter other reason..."
+            android:visibility="gone"
+            android:inputType="textMultiLine"
+            android:minLines="3"
+            android:gravity="top" />
+
+        <Button
+            android:id="@+id/submitReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Submit Report"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+
+</ScrollView>

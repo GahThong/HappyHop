@@ -71,6 +71,7 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.firebase:firebase-storage:20.3.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
