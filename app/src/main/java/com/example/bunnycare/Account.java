@@ -4,19 +4,24 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
 import android.view.ViewGroup;
-import android.widget.*;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupMenu;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
 
 import com.bumptech.glide.Glide;
-import com.google.firebase.auth.*;
-import com.google.firebase.firestore.*;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.EmailAuthProvider;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
@@ -34,15 +39,14 @@ public class Account extends Fragment {
     FirebaseUser user;
 
     Uri imageUri;
-    String imageUrl = "";
 
     ActivityResultLauncher<Intent> imagePickerLauncher;
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
+    public android.view.View onCreateView(android.view.LayoutInflater inflater, ViewGroup container,
+                                          android.os.Bundle savedInstanceState) {
 
-        View view = inflater.inflate(R.layout.fragment_account, container, false);
+        android.view.View view = inflater.inflate(R.layout.fragment_account, container, false);
 
         txtUsername = view.findViewById(R.id.accountUsername);
         txtEmail = view.findViewById(R.id.accountEmail);
@@ -64,7 +68,11 @@ public class Account extends Fragment {
                 result -> {
                     if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
                         imageUri = result.getData().getData();
-                        Glide.with(requireContext()).load(imageUri).circleCrop().into(profileImage);
+
+                        Glide.with(requireContext())
+                                .load(imageUri)
+                                .circleCrop()
+                                .into(profileImage);
                     }
                 });
 
@@ -77,15 +85,23 @@ public class Account extends Fragment {
     }
 
     private void loadUser() {
-        db.collection("users").document(user.getUid()).get()
+
+        db.collection("users")
+                .document(user.getUid())
+                .get()
                 .addOnSuccessListener(doc -> {
+
                     txtUsername.setText(doc.getString("username"));
                     txtEmail.setText(doc.getString("email"));
                     txtBreed.setText(doc.getString("breed"));
-                    imageUrl = doc.getString("imageUrl");
+
+                    String imageUrl = doc.getString("imageUrl");
 
                     if (imageUrl != null && !imageUrl.isEmpty()) {
-                        Glide.with(requireContext()).load(imageUrl).circleCrop().into(profileImage);
+                        Glide.with(requireContext())
+                                .load(imageUrl)
+                                .circleCrop()
+                                .into(profileImage);
                     }
                 });
     }
@@ -96,7 +112,8 @@ public class Account extends Fragment {
         imagePickerLauncher.launch(intent);
     }
 
-    private void showMenu(View view) {
+    private void showMenu(android.view.View view) {
+
         PopupMenu popup = new PopupMenu(requireContext(), view);
         popup.inflate(R.menu.menu_account);
 
@@ -104,13 +121,8 @@ public class Account extends Fragment {
 
             int id = item.getItemId();
 
-            if (id == R.id.menu_account_setting) {
-                showAccountSettings();
-            }
-
-            if (id == R.id.menu_qr) {
-                showQRMenu();
-            }
+            if (id == R.id.menu_account_setting) showAccountSettings();
+            if (id == R.id.menu_qr) showQRMenu();
 
             if (id == R.id.menu_logout) {
                 mAuth.signOut();
@@ -125,6 +137,7 @@ public class Account extends Fragment {
     }
 
     private void showAccountSettings() {
+
         String[] options = {"Change Email", "Change Password"};
 
         new AlertDialog.Builder(getContext())
@@ -132,10 +145,12 @@ public class Account extends Fragment {
                 .setItems(options, (d, i) -> {
                     if (i == 0) changeEmail();
                     if (i == 1) changePassword();
-                }).show();
+                })
+                .show();
     }
 
     private void changeEmail() {
+
         EditText e = new EditText(getContext());
 
         new AlertDialog.Builder(getContext())
@@ -143,12 +158,14 @@ public class Account extends Fragment {
                 .setView(e)
                 .setPositiveButton("Send", (d, w) -> {
 
-                    String email = e.getText().toString();
+                    String email = e.getText().toString().trim();
 
                     user.verifyBeforeUpdateEmail(email)
                             .addOnSuccessListener(a -> {
-                                db.collection("users").document(user.getUid())
+                                db.collection("users")
+                                        .document(user.getUid())
                                         .update("email", email);
+                                Toast.makeText(getContext(), "Verification Sent", Toast.LENGTH_SHORT).show();
                             });
                 })
                 .setNegativeButton("Cancel", null)
@@ -156,31 +173,41 @@ public class Account extends Fragment {
     }
 
     private void changePassword() {
+
         EditText oldP = new EditText(getContext());
         EditText newP = new EditText(getContext());
         EditText reP = new EditText(getContext());
 
-        LinearLayout l = new LinearLayout(getContext());
-        l.setOrientation(LinearLayout.VERTICAL);
-        l.addView(oldP);
-        l.addView(newP);
-        l.addView(reP);
+        LinearLayout layout = new LinearLayout(getContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+
+        layout.addView(oldP);
+        layout.addView(newP);
+        layout.addView(reP);
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Change Password")
-                .setView(l)
+                .setView(layout)
                 .setPositiveButton("Update", (d, w) -> {
 
-                    if (!newP.getText().toString().equals(reP.getText().toString())) return;
+                    String oldPass = oldP.getText().toString().trim();
+                    String newPass = newP.getText().toString().trim();
+                    String rePass = reP.getText().toString().trim();
 
-                    AuthCredential c = EmailAuthProvider.getCredential(
-                            user.getEmail(),
-                            oldP.getText().toString()
-                    );
+                    if (!newPass.equals(rePass)) {
+                        Toast.makeText(getContext(), "Passwords do not match", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-                    user.reauthenticate(c)
+                    AuthCredential credential =
+                            EmailAuthProvider.getCredential(user.getEmail(), oldPass);
+
+                    user.reauthenticate(credential)
                             .addOnSuccessListener(a ->
-                                    user.updatePassword(newP.getText().toString())
+                                    user.updatePassword(newPass)
+                                            .addOnSuccessListener(unused ->
+                                                    Toast.makeText(getContext(), "Password Updated", Toast.LENGTH_SHORT).show()
+                                            )
                             );
                 })
                 .setNegativeButton("Cancel", null)
@@ -189,7 +216,7 @@ public class Account extends Fragment {
 
     private void showQRMenu() {
 
-        String[] options = {"Generate QR", "Scan QR"};
+        String[] options = {"Generate QR", "Scan QR", "QRImageUpload"};
 
         new AlertDialog.Builder(getContext())
                 .setTitle("QR Options")
@@ -197,24 +224,69 @@ public class Account extends Fragment {
 
                     if (i == 0) generateQR();
                     if (i == 1) scanQR();
-
-                }).show();
+                    if (i == 2) openQRImageUpload();
+                })
+                .show();
     }
 
     private void generateQR() {
-        Intent i = new Intent(getActivity(), QRActivity.class);
-        i.putExtra("data", user.getUid());
-        startActivity(i);
+        Intent intent = new Intent(getActivity(), QRActivity.class);
+        intent.putExtra("data", user.getUid());
+        startActivity(intent);
     }
 
     private void scanQR() {
         IntentIntegrator.forSupportFragment(this).initiateScan();
     }
 
+    private void openQRImageUpload() {
+        Intent intent = new Intent(Intent.ACTION_PICK);
+        intent.setType("image/*");
+        startActivityForResult(intent, 2001);
+    }
+
+    private void showFloatingImage(String imageUrl) {
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+
+        TextView title = new TextView(requireContext());
+        title.setText("Medical Record");
+        title.setTextSize(22);
+        title.setGravity(android.view.Gravity.CENTER);
+        title.setPadding(0, 0, 0, 30);
+
+        ImageView imageView = new ImageView(requireContext());
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                800
+        );
+
+        imageView.setLayoutParams(params);
+        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+        Glide.with(requireContext())
+                .load(imageUrl)
+                .into(imageView);
+
+        layout.addView(title);
+        layout.addView(imageView);
+
+        builder.setView(layout)
+                .setPositiveButton("Close", null);
+
+        builder.create().show();
+    }
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
 
-        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        IntentResult result =
+                IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
 
         if (result != null && result.getContents() != null) {
 
@@ -232,19 +304,25 @@ public class Account extends Fragment {
                             return;
                         }
 
-                        ImageView img = new ImageView(getContext());
-                        img.setAdjustViewBounds(true);
-
-                        AlertDialog dialog = new AlertDialog.Builder(getContext())
-                                .setTitle("QR Image")
-                                .setView(img)
-                                .setPositiveButton("Close", null)
-                                .create();
-
-                        dialog.show();
-
-                        Glide.with(requireContext()).load(image).into(img);
+                        showFloatingImage(image);
                     });
+
+            return;
+        }
+
+        if (requestCode == 2001 && data != null) {
+
+            Uri uri = data.getData();
+
+            if (uri != null) {
+
+                db.collection("users")
+                        .document(user.getUid())
+                        .update("qrImage", uri.toString())
+                        .addOnSuccessListener(a ->
+                                Toast.makeText(getContext(), "QR Image Updated", Toast.LENGTH_SHORT).show()
+                        );
+            }
         }
 
         super.onActivityResult(requestCode, resultCode, data);
