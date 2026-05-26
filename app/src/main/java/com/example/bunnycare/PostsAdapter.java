@@ -1,33 +1,21 @@
 package com.example.bunnycare;
 
 import android.content.Context;
+import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> {
 
@@ -35,7 +23,6 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
     List<posts> list;
 
     FirebaseFirestore db = FirebaseFirestore.getInstance();
-    FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
 
     public PostsAdapter(Context context, List<posts> list) {
         this.context = context;
@@ -58,19 +45,29 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
         posts post = list.get(position);
 
         holder.userName.setText(post.getPosterName());
-
         holder.description.setText(post.getPost());
 
-        holder.likeCount.setText(
-                String.valueOf(post.getLikesCount())
-        );
+        holder.likeCount.setText(String.valueOf(post.getLikesCount()));
+        holder.commentCount.setText(String.valueOf(post.getCommentCount()));
 
-        holder.commentCount.setText(
-                String.valueOf(post.getCommentCount())
-        );
+        Timestamp timestamp = post.getTimestamp();
 
-        if (post.getPostImage() != null &&
-                !post.getPostImage().isEmpty()) {
+        if (timestamp != null) {
+
+            CharSequence timeAgo = DateUtils.getRelativeTimeSpanString(
+                    timestamp.toDate().getTime(),
+                    System.currentTimeMillis(),
+                    DateUtils.MINUTE_IN_MILLIS
+            );
+
+            holder.timestampTextView.setText(timeAgo);
+
+        } else {
+
+            holder.timestampTextView.setText("Just now");
+        }
+
+        if (post.getPostImage() != null && !post.getPostImage().isEmpty()) {
 
             holder.postImage.setVisibility(View.VISIBLE);
 
@@ -83,534 +80,66 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
             holder.postImage.setVisibility(View.GONE);
         }
 
-        db.collection("users")
-                .document(post.getPosterId())
-                .get()
-                .addOnSuccessListener(userDoc -> {
+        if (post.getProfileImage() != null && !post.getProfileImage().isEmpty()) {
 
-                    String profileUrl =
-                            userDoc.getString("imageUrl");
+            Glide.with(context)
+                    .load(post.getProfileImage())
+                    .circleCrop()
+                    .placeholder(R.drawable.account_user)
+                    .into(holder.profileImageView);
 
-                    if (profileUrl != null &&
-                            !profileUrl.isEmpty()) {
+        } else {
 
-                        Glide.with(context)
-                                .load(profileUrl)
-                                .circleCrop()
-                                .into(holder.profileImageView);
-
-                    } else {
-
-                        holder.profileImageView
-                                .setImageResource(
-                                        R.drawable.account_user
-                                );
-                    }
-                });
-
-        String postId = post.getId();
+            holder.profileImageView.setImageResource(R.drawable.account_user);
+        }
 
         db.collection("posts")
-                .document(postId)
+                .document(post.getId())
                 .addSnapshotListener((value, error) -> {
 
-                    if (value != null &&
-                            value.exists()) {
+                    if (value != null && value.exists()) {
 
-                        Long likes =
-                                value.getLong("likesCount");
-
-                        Long comments =
-                                value.getLong("commentCount");
+                        Long likes = value.getLong("likesCount");
+                        Long comments = value.getLong("commentCount");
 
                         holder.likeCount.setText(
-                                String.valueOf(
-                                        likes != null ? likes : 0
-                                )
+                                String.valueOf(likes != null ? likes : 0)
                         );
 
                         holder.commentCount.setText(
-                                String.valueOf(
-                                        comments != null ? comments : 0
-                                )
+                                String.valueOf(comments != null ? comments : 0)
                         );
                     }
                 });
-
-        holder.likeBtn.setOnClickListener(v -> {
-
-            if (user == null) return;
-
-            String uid = user.getUid();
-
-            db.collection("posts")
-                    .document(postId)
-                    .collection("likes")
-                    .document(uid)
-                    .get()
-                    .addOnSuccessListener(doc -> {
-
-                        if (doc.exists()) {
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .collection("likes")
-                                    .document(uid)
-                                    .delete();
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .update("likesCount",
-                                            FieldValue.increment(-1));
-
-                        } else {
-
-                            Map<String, Object> like =
-                                    new HashMap<>();
-
-                            like.put("uid", uid);
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .collection("likes")
-                                    .document(uid)
-                                    .set(like);
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .update("likesCount",
-                                            FieldValue.increment(1));
-
-                            db.collection("users")
-                                    .document(uid)
-                                    .get()
-                                    .addOnSuccessListener(userDoc -> {
-
-                                        String username;
-
-                                        if (userDoc.exists()) {
-
-                                            String name =
-                                                    userDoc.getString("username");
-
-                                            username =
-                                                    name != null
-                                                            ? name
-                                                            : "Unknown";
-
-                                        } else {
-
-                                            username = "Unknown";
-                                        }
-
-                                        db.collection("posts")
-                                                .document(postId)
-                                                .get()
-                                                .addOnSuccessListener(originalPost -> {
-
-                                                    String posterId =
-                                                            originalPost.getString(
-                                                                    "posterId"
-                                                            );
-
-                                                    if (posterId != null &&
-                                                            !posterId.equals(uid)) {
-
-                                                        Map<String, Object>
-                                                                notification =
-                                                                new HashMap<>();
-
-                                                        notification.put(
-                                                                "toUserId",
-                                                                posterId
-                                                        );
-
-                                                        notification.put(
-                                                                "fromUserName",
-                                                                username
-                                                        );
-
-                                                        notification.put(
-                                                                "type",
-                                                                "like"
-                                                        );
-
-                                                        notification.put(
-                                                                "postText",
-                                                                originalPost.get("post")
-                                                        );
-
-                                                        notification.put(
-                                                                "timestamp",
-                                                                FieldValue.serverTimestamp()
-                                                        );
-
-                                                        db.collection("notifications")
-                                                                .add(notification);
-                                                    }
-                                                });
-                                    });
-                        }
-                    });
-        });
-
-        holder.reportBtn.setOnClickListener(v -> {
-
-            if (user == null) return;
-
-            BottomSheetDialog dialog =
-                    new BottomSheetDialog(context);
-
-            View sheet = LayoutInflater.from(context)
-                    .inflate(R.layout.report_sheet, null);
-
-            dialog.setContentView(sheet);
-
-            dialog.show();
-
-            CheckBox rabbitTopic =
-                    sheet.findViewById(R.id.rabbitTopic);
-
-            CheckBox cursingWords =
-                    sheet.findViewById(R.id.cursingWords);
-
-            CheckBox violence =
-                    sheet.findViewById(R.id.violence);
-
-            CheckBox hate =
-                    sheet.findViewById(R.id.hate);
-
-            CheckBox others =
-                    sheet.findViewById(R.id.others);
-
-            EditText reportInput =
-                    sheet.findViewById(R.id.reportInput);
-
-            Button submitReport =
-                    sheet.findViewById(R.id.submitReport);
-
-            others.setOnCheckedChangeListener(
-                    (buttonView, isChecked) -> {
-
-                        if (isChecked) {
-
-                            reportInput.setVisibility(View.VISIBLE);
-
-                        } else {
-
-                            reportInput.setVisibility(View.GONE);
-                        }
-                    });
-
-            submitReport.setOnClickListener(v1 -> {
-
-                List<String> reasons =
-                        new ArrayList<>();
-
-                if (rabbitTopic.isChecked()) {
-
-                    reasons.add("Not including rabbit topic");
-                }
-
-                if (cursingWords.isChecked()) {
-
-                    reasons.add("Cursing words");
-                }
-
-                if (violence.isChecked()) {
-
-                    reasons.add("Violence");
-                }
-
-                if (hate.isChecked()) {
-
-                    reasons.add("Hate");
-                }
-
-                if (others.isChecked()) {
-
-                    String otherText =
-                            reportInput.getText()
-                                    .toString()
-                                    .trim();
-
-                    if (otherText.isEmpty()) {
-
-                        reportInput.setError("Enter reason");
-
-                        return;
-                    }
-
-                    reasons.add(otherText);
-                }
-
-                if (reasons.isEmpty()) {
-
-                    Toast.makeText(
-                            context,
-                            "Select at least one reason",
-                            Toast.LENGTH_SHORT
-                    ).show();
-
-                    return;
-                }
-
-                String uid = user.getUid();
-
-                Map<String, Object> report =
-                        new HashMap<>();
-
-                report.put("postId", postId);
-
-                report.put("reportedBy", uid);
-
-                report.put("reasons", reasons);
-
-                report.put("handled", false);
-
-                report.put("timestamp",
-                        FieldValue.serverTimestamp());
-
-                db.collection("reports")
-                        .document(postId + "_" + uid)
-                        .set(report)
-                        .addOnSuccessListener(doc -> {
-
-                            Toast.makeText(
-                                    context,
-                                    "Post reported",
-                                    Toast.LENGTH_SHORT
-                            ).show();
-
-                            dialog.dismiss();
-                        })
-                        .addOnFailureListener(e ->
-
-                                Toast.makeText(
-                                        context,
-                                        "Failed to report",
-                                        Toast.LENGTH_SHORT
-                                ).show());
-            });
-        });
-
-        holder.commentBtn.setOnClickListener(v -> {
-
-            BottomSheetDialog dialog =
-                    new BottomSheetDialog(context);
-
-            View sheet = LayoutInflater.from(context)
-                    .inflate(R.layout.comment_sheet, null);
-
-            dialog.setContentView(sheet);
-
-            dialog.show();
-
-            RecyclerView recycler =
-                    sheet.findViewById(R.id.commentRecycler);
-
-            EditText input =
-                    sheet.findViewById(R.id.commentInput);
-
-            Button send =
-                    sheet.findViewById(R.id.sendComment);
-
-            List<Map<String, Object>> commentList =
-                    new ArrayList<>();
-
-            CommentAdapter adapter =
-                    new CommentAdapter(commentList);
-
-            recycler.setLayoutManager(
-                    new LinearLayoutManager(context)
-            );
-
-            recycler.setAdapter(adapter);
-
-            db.collection("posts")
-                    .document(postId)
-                    .collection("comments")
-                    .orderBy("timestamp",
-                            Query.Direction.ASCENDING)
-                    .addSnapshotListener((value, error) -> {
-
-                        if (value == null) return;
-
-                        commentList.clear();
-
-                        for (DocumentSnapshot doc :
-                                value.getDocuments()) {
-
-                            commentList.add(doc.getData());
-                        }
-
-                        adapter.notifyDataSetChanged();
-                    });
-
-            send.setOnClickListener(v1 -> {
-
-                String text =
-                        input.getText()
-                                .toString()
-                                .trim();
-
-                if (text.isEmpty() || user == null) return;
-
-                String uid = user.getUid();
-
-                db.collection("users")
-                        .document(uid)
-                        .get()
-                        .addOnSuccessListener(userDoc -> {
-
-                            String username;
-
-                            if (userDoc.exists()) {
-
-                                String name =
-                                        userDoc.getString("username");
-
-                                username =
-                                        name != null
-                                                ? name
-                                                : "Unknown";
-
-                            } else {
-
-                                username = "Unknown";
-                            }
-
-                            Map<String, Object> comment =
-                                    new HashMap<>();
-
-                            comment.put("text", text);
-
-                            comment.put("uid", uid);
-
-                            comment.put("username", username);
-
-                            comment.put("timestamp",
-                                    FieldValue.serverTimestamp());
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .collection("comments")
-                                    .add(comment)
-                                    .addOnSuccessListener(doc -> {
-
-                                        db.collection("posts")
-                                                .document(postId)
-                                                .update(
-                                                        "commentCount",
-                                                        FieldValue.increment(1)
-                                                );
-
-                                        input.setText("");
-                                    });
-
-                            db.collection("posts")
-                                    .document(postId)
-                                    .get()
-                                    .addOnSuccessListener(originalPost -> {
-
-                                        String posterId =
-                                                originalPost.getString(
-                                                        "posterId"
-                                                );
-
-                                        if (posterId != null &&
-                                                !posterId.equals(uid)) {
-
-                                            Map<String, Object>
-                                                    notification =
-                                                    new HashMap<>();
-
-                                            notification.put(
-                                                    "toUserId",
-                                                    posterId
-                                            );
-
-                                            notification.put(
-                                                    "fromUserName",
-                                                    username
-                                            );
-
-                                            notification.put(
-                                                    "type",
-                                                    "comment"
-                                            );
-
-                                            notification.put(
-                                                    "postText",
-                                                    originalPost.get("post")
-                                            );
-
-                                            notification.put(
-                                                    "timestamp",
-                                                    FieldValue.serverTimestamp()
-                                            );
-
-                                            db.collection("notifications")
-                                                    .add(notification);
-                                        }
-                                    });
-                        });
-            });
-        });
     }
 
     @Override
     public int getItemCount() {
-
         return list.size();
     }
 
-    public static class ViewHolder
-            extends RecyclerView.ViewHolder {
+    public static class ViewHolder extends RecyclerView.ViewHolder {
 
-        TextView userName,
-                description,
-                likeCount,
-                commentCount;
+        TextView userName;
+        TextView description;
+        TextView likeCount;
+        TextView commentCount;
+        TextView timestampTextView;
 
-        ImageView postImage,
-                likeBtn,
-                commentBtn,
-                reportBtn,
-                profileImageView;
+        ImageView postImage;
+        ImageView profileImageView;
 
         public ViewHolder(@NonNull View itemView) {
-
             super(itemView);
 
-            userName =
-                    itemView.findViewById(R.id.userName);
+            userName = itemView.findViewById(R.id.userName);
+            description = itemView.findViewById(R.id.postDescriptionTextView);
+            likeCount = itemView.findViewById(R.id.likeCount);
+            commentCount = itemView.findViewById(R.id.commentCount);
+            timestampTextView = itemView.findViewById(R.id.timestampTextView);
 
-            description =
-                    itemView.findViewById(
-                            R.id.postDescriptionTextView
-                    );
-
-            likeCount =
-                    itemView.findViewById(R.id.likeCount);
-
-            commentCount =
-                    itemView.findViewById(R.id.commentCount);
-
-            postImage =
-                    itemView.findViewById(R.id.postImageView);
-
-            likeBtn =
-                    itemView.findViewById(R.id.likeBtn);
-
-            commentBtn =
-                    itemView.findViewById(R.id.commentBtn);
-
-            reportBtn =
-                    itemView.findViewById(R.id.reportBtn);
-
-            profileImageView =
-                    itemView.findViewById(R.id.profileImageView);
+            postImage = itemView.findViewById(R.id.postImageView);
+            profileImageView = itemView.findViewById(R.id.profileImageView);
         }
     }
 }

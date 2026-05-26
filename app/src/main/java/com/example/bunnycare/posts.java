@@ -1,35 +1,44 @@
 package com.example.bunnycare;
 
+import com.google.firebase.Timestamp;
+
 public class posts {
 
     private String id;
-
     private String post;
     private String postImage;
     private String posterId;
     private String posterName;
+    private String profileImage;
 
     private int likesCount;
     private int commentCount;
 
-    public posts() {}
+    private Timestamp timestamp;
 
-    public posts(String id, String post, String postImage, String posterId,
-                 String posterName, int likesCount, int commentCount) {
+    public posts() {
+    }
+
+    public posts(String id,
+                 String post,
+                 String postImage,
+                 String posterId,
+                 String posterName,
+                 String profileImage,
+                 int likesCount,
+                 int commentCount,
+                 Timestamp timestamp) {
+
         this.id = id;
         this.post = post;
         this.postImage = postImage;
         this.posterId = posterId;
         this.posterName = posterName;
+        this.profileImage = profileImage;
         this.likesCount = likesCount;
         this.commentCount = commentCount;
+        this.timestamp = timestamp;
     }
-    private String profileImage;
-
-    public String getProfileImage() {
-        return profileImage;
-    }
-
 
     public String getId() {
         return id;
@@ -51,6 +60,10 @@ public class posts {
         return posterName;
     }
 
+    public String getProfileImage() {
+        return profileImage;
+    }
+
     public int getLikesCount() {
         return likesCount;
     }
@@ -59,6 +72,9 @@ public class posts {
         return commentCount;
     }
 
+    public Timestamp getTimestamp() {
+        return timestamp;
+    }
 
     public void setId(String id) {
         this.id = id;
@@ -80,11 +96,19 @@ public class posts {
         this.posterName = posterName;
     }
 
+    public void setProfileImage(String profileImage) {
+        this.profileImage = profileImage;
+    }
+
     public void setLikesCount(int likesCount) {
         this.likesCount = likesCount;
     }
 
-    public void setCommentCount(int commentCount) { //
+    public void setCommentCount(int commentCount) {
         this.commentCount = commentCount;
+    }
+
+    public void setTimestamp(Timestamp timestamp) {
+        this.timestamp = timestamp;
     }
 }

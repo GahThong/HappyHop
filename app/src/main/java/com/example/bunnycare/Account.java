@@ -57,6 +57,10 @@ public class Account extends Fragment {
 
         txtRole.setText("Rabbit Owner");
 
+        txtEmail.setEnabled(false);
+        txtEmail.setFocusable(false);
+        txtEmail.setClickable(false);
+
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
         user = mAuth.getCurrentUser();
@@ -67,6 +71,7 @@ public class Account extends Fragment {
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+
                         imageUri = result.getData().getData();
 
                         Glide.with(requireContext())
@@ -77,7 +82,27 @@ public class Account extends Fragment {
                 });
 
         profileImage.setOnClickListener(v -> openGallery());
+
         menuIcon.setOnClickListener(this::showMenu);
+
+        txtUsername.setOnFocusChangeListener((v, hasFocus) -> {
+
+            if (!hasFocus) {
+
+                String newUsername = txtUsername.getText().toString().trim();
+
+                Map<String, Object> map = new HashMap<>();
+                map.put("username", newUsername);
+
+                db.collection("users")
+                        .document(user.getUid())
+                        .update(map)
+                        .addOnSuccessListener(unused ->
+                                Toast.makeText(getContext(),
+                                        "Username Updated",
+                                        Toast.LENGTH_SHORT).show());
+            }
+        });
 
         loadUser();
 
@@ -98,6 +123,7 @@ public class Account extends Fragment {
                     String imageUrl = doc.getString("imageUrl");
 
                     if (imageUrl != null && !imageUrl.isEmpty()) {
+
                         Glide.with(requireContext())
                                 .load(imageUrl)
                                 .circleCrop()
@@ -107,26 +133,37 @@ public class Account extends Fragment {
     }
 
     private void openGallery() {
+
         Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");
+
         imagePickerLauncher.launch(intent);
     }
 
     private void showMenu(android.view.View view) {
 
         PopupMenu popup = new PopupMenu(requireContext(), view);
+
         popup.inflate(R.menu.menu_account);
 
         popup.setOnMenuItemClickListener(item -> {
 
             int id = item.getItemId();
 
-            if (id == R.id.menu_account_setting) showAccountSettings();
-            if (id == R.id.menu_qr) showQRMenu();
+            if (id == R.id.menu_account_setting) {
+                showAccountSettings();
+            }
+
+            if (id == R.id.menu_qr) {
+                showQRMenu();
+            }
 
             if (id == R.id.menu_logout) {
+
                 mAuth.signOut();
+
                 startActivity(new Intent(getActivity(), Login.class));
+
                 requireActivity().finish();
             }
 
@@ -143,8 +180,14 @@ public class Account extends Fragment {
         new AlertDialog.Builder(getContext())
                 .setTitle("Account Settings")
                 .setItems(options, (d, i) -> {
-                    if (i == 0) changeEmail();
-                    if (i == 1) changePassword();
+
+                    if (i == 0) {
+                        changeEmail();
+                    }
+
+                    if (i == 1) {
+                        changePassword();
+                    }
                 })
                 .show();
     }
@@ -162,10 +205,14 @@ public class Account extends Fragment {
 
                     user.verifyBeforeUpdateEmail(email)
                             .addOnSuccessListener(a -> {
+
                                 db.collection("users")
                                         .document(user.getUid())
                                         .update("email", email);
-                                Toast.makeText(getContext(), "Verification Sent", Toast.LENGTH_SHORT).show();
+
+                                Toast.makeText(getContext(),
+                                        "Verification Sent",
+                                        Toast.LENGTH_SHORT).show();
                             });
                 })
                 .setNegativeButton("Cancel", null)
@@ -178,7 +225,12 @@ public class Account extends Fragment {
         EditText newP = new EditText(getContext());
         EditText reP = new EditText(getContext());
 
+        oldP.setHint("Current Password");
+        newP.setHint("New Password");
+        reP.setHint("Confirm Password");
+
         LinearLayout layout = new LinearLayout(getContext());
+
         layout.setOrientation(LinearLayout.VERTICAL);
 
         layout.addView(oldP);
@@ -195,7 +247,11 @@ public class Account extends Fragment {
                     String rePass = reP.getText().toString().trim();
 
                     if (!newPass.equals(rePass)) {
-                        Toast.makeText(getContext(), "Passwords do not match", Toast.LENGTH_SHORT).show();
+
+                        Toast.makeText(getContext(),
+                                "Passwords do not match",
+                                Toast.LENGTH_SHORT).show();
+
                         return;
                     }
 
@@ -206,7 +262,9 @@ public class Account extends Fragment {
                             .addOnSuccessListener(a ->
                                     user.updatePassword(newPass)
                                             .addOnSuccessListener(unused ->
-                                                    Toast.makeText(getContext(), "Password Updated", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(getContext(),
+                                                            "Password Updated",
+                                                            Toast.LENGTH_SHORT).show()
                                             )
                             );
                 })
@@ -222,26 +280,41 @@ public class Account extends Fragment {
                 .setTitle("QR Options")
                 .setItems(options, (d, i) -> {
 
-                    if (i == 0) generateQR();
-                    if (i == 1) scanQR();
-                    if (i == 2) openQRImageUpload();
+                    if (i == 0) {
+                        generateQR();
+                    }
+
+                    if (i == 1) {
+                        scanQR();
+                    }
+
+                    if (i == 2) {
+                        openQRImageUpload();
+                    }
                 })
                 .show();
     }
 
     private void generateQR() {
+
         Intent intent = new Intent(getActivity(), QRActivity.class);
+
         intent.putExtra("data", user.getUid());
+
         startActivity(intent);
     }
 
     private void scanQR() {
+
         IntentIntegrator.forSupportFragment(this).initiateScan();
     }
 
     private void openQRImageUpload() {
+
         Intent intent = new Intent(Intent.ACTION_PICK);
+
         intent.setType("image/*");
+
         startActivityForResult(intent, 2001);
     }
 
@@ -250,10 +323,12 @@ public class Account extends Fragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
 
         LinearLayout layout = new LinearLayout(requireContext());
+
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(40, 40, 40, 40);
 
         TextView title = new TextView(requireContext());
+
         title.setText("Medical Record");
         title.setTextSize(22);
         title.setGravity(android.view.Gravity.CENTER);
@@ -261,10 +336,11 @@ public class Account extends Fragment {
 
         ImageView imageView = new ImageView(requireContext());
 
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                800
-        );
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        800
+                );
 
         imageView.setLayoutParams(params);
         imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -286,7 +362,11 @@ public class Account extends Fragment {
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
 
         IntentResult result =
-                IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+                IntentIntegrator.parseActivityResult(
+                        requestCode,
+                        resultCode,
+                        data
+                );
 
         if (result != null && result.getContents() != null) {
 
@@ -300,7 +380,11 @@ public class Account extends Fragment {
                         String image = doc.getString("qrImage");
 
                         if (image == null || image.isEmpty()) {
-                            Toast.makeText(getContext(), "No image found", Toast.LENGTH_SHORT).show();
+
+                            Toast.makeText(getContext(),
+                                    "No image found",
+                                    Toast.LENGTH_SHORT).show();
+
                             return;
                         }
 
@@ -320,7 +404,9 @@ public class Account extends Fragment {
                         .document(user.getUid())
                         .update("qrImage", uri.toString())
                         .addOnSuccessListener(a ->
-                                Toast.makeText(getContext(), "QR Image Updated", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(getContext(),
+                                        "QR Image Updated",
+                                        Toast.LENGTH_SHORT).show()
                         );
             }
         }
