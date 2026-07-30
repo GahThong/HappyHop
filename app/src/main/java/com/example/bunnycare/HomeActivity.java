@@ -37,11 +37,10 @@ public class HomeActivity extends AppCompatActivity {
 
 
         if (fragment == null || isFinishing()) return;
-
         getSupportFragmentManager()
                 .beginTransaction()
                 .replace(R.id.container, fragment)
-                .addToBackStack(null)
                 .commit();
     }
-}
+
+    }

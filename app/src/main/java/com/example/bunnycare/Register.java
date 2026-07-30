@@ -22,7 +22,8 @@ import java.util.Map;
 
 public class Register extends AppCompatActivity {
 
-    private TextInputEditText firstName, lastName, username, email, password, repassword;
+    private EditText firstName, lastName, username, email;
+    private TextInputEditText password, repassword;
     private Button btnSignUp;
     private ProgressBar progressBar;
     private TextView textLogin;

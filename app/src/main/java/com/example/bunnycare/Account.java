@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -17,11 +18,15 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
 
 import com.bumptech.glide.Glide;
+import com.cloudinary.android.MediaManager;
+import com.cloudinary.android.callback.ErrorInfo;
+import com.cloudinary.android.callback.UploadCallback;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
@@ -39,7 +44,8 @@ public class Account extends Fragment {
     FirebaseUser user;
 
     Uri imageUri;
-
+    Button btnSave, btnDiscard;
+    String imageUrl = "";
     ActivityResultLauncher<Intent> imagePickerLauncher;
 
     @Override
@@ -54,7 +60,8 @@ public class Account extends Fragment {
         txtRole = view.findViewById(R.id.accountRole);
         profileImage = view.findViewById(R.id.profileImage);
         menuIcon = view.findViewById(R.id.menuIcon);
-
+        btnSave = view.findViewById(R.id.btnSave);
+        btnDiscard = view.findViewById(R.id.btnDiscard);
         txtRole.setText("Rabbit Owner");
 
         txtEmail.setEnabled(false);
@@ -104,11 +111,58 @@ public class Account extends Fragment {
             }
         });
 
+        btnSave.setOnClickListener(v -> uploadToCloudinary());
         loadUser();
 
         return view;
     }
+    private void uploadToCloudinary() {
 
+        if (imageUri == null) {
+            saveProfile();
+            return;
+        }
+
+        MediaManager.get()
+                .upload(imageUri)
+                .unsigned("ml_default")
+                .callback(new UploadCallback() {
+
+                    @Override public void onStart(String requestId) {}
+                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
+
+                    @Override
+                    public void onSuccess(String requestId, Map resultData) {
+
+                        imageUrl = (String) resultData.get("secure_url");
+                        saveProfile();
+                    }
+
+                    @Override public void onError(String requestId, ErrorInfo error) {}
+                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
+
+                }).dispatch();
+    }
+
+    private void saveProfile() {
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("username", txtUsername.getText().toString().trim());
+        map.put("email", txtEmail.getText().toString().trim());
+        map.put("breed", txtBreed.getText().toString().trim());
+        map.put("role", "Rabbit Owner");
+        map.put("imageUrl", imageUrl);
+
+        db.collection("users")
+                .document(user.getUid())
+                .set(map, SetOptions.merge())
+                .addOnSuccessListener(a ->
+                        Toast.makeText(getContext(), "Saved", Toast.LENGTH_SHORT).show()
+                )
+                .addOnFailureListener(e ->
+                        Toast.makeText(getContext(), e.getMessage(), Toast.LENGTH_LONG).show()
+                );
+    }
     private void loadUser() {
 
         db.collection("users")

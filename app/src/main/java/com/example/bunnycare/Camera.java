@@ -171,17 +171,17 @@ public class Camera extends Fragment {
         switch (breed.toLowerCase()) {
 
             case "new zealand":
-                return " Breed: New Zealand\n\n Diet:\n- Unlimited hay\n- Pellets\n- Vegetables\n\n Care:\n- Spacious cage\n- Daily exercise\n\n️ Notes:\n- Monitor weight";
+                return " Breed: New Zealand\n\n Diet:\n- Unlimited hay\n- Pellets\n- Vegetables\n\n Care:\n- Spacious cage\n- Daily exercise\n\n️ Notes:\n- Monitor weight\n\n" + "Video Guide: \n" + "https://youtu.be/FbibvbYxIzw?si=GPenxib7t4yb1Ko2";
 
             case "lionhead":
-                return " Breed: Lionhead\n\n Diet:\n- Hay + greens\n\n Care:\n- Grooming required\n\n️ Notes:\n- Avoid hair ingestion";
+                return " Breed: Lionhead\n\n Diet:\n- Hay + greens\n\n Care:\n- Grooming required\n\n️ Notes:\n- Avoid hair ingestion\n\n" + "Video Guide: \n" + "https://youtu.be/57y91glfDGc?si=TGHYF2oIh40aiCxw";
 
             case "holland":
             case "holland lop":
-                return " Breed: Holland Lop\n\n Diet:\n- Hay + controlled pellets\n\n Care:\n- Ear cleaning\n\n️ Notes:\n- Avoid obesity";
+                return " Breed: Holland Lop\n\n Diet:\n- Hay + controlled pellets\n\n Care:\n- Ear cleaning\n\n️ Notes:\n- Avoid obesity\n\n" + "Video Guide: \n" + "https://youtu.be/HfLwpvfjuuI?si=dXG-fEA-BqKQ5mIJ";
 
             case "california":
-                return " Breed: California\n\n Diet:\n- Balanced diet\n\n Care:\n- Cool environment\n\n Notes:\n- Check skin regularly";
+                return " Breed: California\n\n Diet:\n- Balanced diet\n\n Care:\n- Cool environment\n\n Notes:\n- Check skin regularly\n\n" + "Video Guide: \n" + "https://youtu.be/3fJJRRsDwUo?si=hKjR826zbbiKWGFk";
 
             default:
                 return " General Rabbit Care\n\n Diet:\n- Hay + vegetables\n\n Care:\n- Clean cage\n\nNotes:\n- Fresh water always";
@@ -192,16 +192,16 @@ public class Camera extends Fragment {
         switch (disease.toLowerCase()) {
 
             case "myxomatosis":
-                return " Myxomatosis\n️ Severe viral disease\n Vet required";
+                return " Myxomatosis\n️ Severe viral disease\n Vet required\n\n" + "Additional Info: \n" + "https://youtu.be/RUezkUetEEA?si=gcsRr-tNhlvpU7sg";
 
             case "mites":
-                return " Mites\n️ Skin irritation\n Treat with ivermectin";
+                return " Mites\n️ Skin irritation\n Treat with ivermectin\n\n" + "Additional Info: \n" + "https://youtu.be/iQyPn2VL70s?si=EAnvWMapiA8YgJRW";
 
             case "malocclusion":
-                return " Malocclusion\n️ Teeth problem\n Needs dental care";
+                return " Malocclusion\n️ Teeth problem\n Needs dental care\n\n" + "Additional Info: \n" + "https://youtu.be/2F328Q38uJc?si=PQNXStwEciaECc8h";
 
             case "pasteurellosis":
-                return " Pasteurellosis\n⚠ Respiratory infection\n Antibiotics required";
+                return " Pasteurellosis\n⚠ Respiratory infection\n Antibiotics required\n\n" + "Additional Info: \n" + "https://youtu.be/Uxj0VIqC83Q?si=J5OugchFPDFVkepC";
         }
         return "";
     }

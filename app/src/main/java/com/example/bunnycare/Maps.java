@@ -41,8 +41,7 @@ public class Maps extends Fragment {
     private Marker userMarker;
 
     class Vet {
-        double lat;
-        double lng;
+        double lat, lng;
         String name;
         double distance;
 
@@ -54,8 +53,7 @@ public class Maps extends Fragment {
     }
 
     class FeedSeller {
-        double lat;
-        double lng;
+        double lat, lng;
         String name;
         double distance;
 
@@ -116,6 +114,7 @@ public class Maps extends Fragment {
 
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
         double R = 6371000;
+
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
 
@@ -204,31 +203,22 @@ public class Maps extends Fragment {
 
         vets.add(new Vet(14.66864878815696, 120.54425441716226,
                 "Easyvet Cupang Branch - Pet Supplies & Veterinary Services"));
-
         vets.add(new Vet(14.674436487056353, 120.54718269535796,
                 "PENINSULA VETERINARY CLINIC"));
-
         vets.add(new Vet(14.678788762953449, 120.54162734120344,
                 "Man´s Best Friend Veterinary Clinics"));
-
         vets.add(new Vet(14.681817404737464, 120.54355199074746,
                 "Pet Hub Veterinary Hospital - Bataan"));
-
         vets.add(new Vet(14.684225208214851, 120.53775841911424,
                 "Veterinary Clinic at PE SM Bataan"));
-
         vets.add(new Vet(14.686466932444512, 120.53951794827692,
                 "ABC Animal Bite Center"));
-
         vets.add(new Vet(14.704648957282709, 120.5375867578363,
                 "Bfc Animal Clinic"));
-
         vets.add(new Vet(14.677043233369728, 120.5359559748471,
                 "Pet Needs Veterinary Care"));
-
         vets.add(new Vet(14.678579282525043, 120.52784497456055,
                 "PETSTOP Animal Clinic"));
-
         vets.add(new Vet(14.672808663549786, 120.527501651784,
                 "Easyvet Balanga Main Branch"));
         vets.add(new Vet(14.619125, 120.563875,
@@ -236,7 +226,7 @@ public class Maps extends Fragment {
         vets.add(new Vet(14.620938, 120.579188,
                 "BFC Animal Clinic"));
         vets.add(new Vet(14.6657, 120.5593,
-                "Peninsula Veterinary Clinic "));
+                "Peninsula Veterinary Clinic"));
 
         sortVetsByNearest(vets, userLat, userLng);
 
@@ -255,10 +245,12 @@ public class Maps extends Fragment {
             Marker marker = new Marker(mapView);
             marker.setPosition(new GeoPoint(v.lat, v.lng));
 
-            marker.setTitle(v.name);
+            marker.setTitle("🐾 Vet: " + v.name);
 
             if (i == 0) {
-                marker.setSnippet("NEAREST");
+                marker.setSnippet("NEAREST VETERINARY CLINIC");
+            } else {
+                marker.setSnippet("Veterinary Clinic");
             }
 
             marker.setIcon(icon);
@@ -280,6 +272,8 @@ public class Maps extends Fragment {
         feeds.add(new FeedSeller(14.671615648815195, 120.53675708621026, "Poultry Hub"));
         feeds.add(new FeedSeller(14.665331637873322, 120.53361748589477, "Ava's Pet Station"));
         feeds.add(new FeedSeller(14.676540701734748, 120.52366234271304, "MBCom Feeds Outlet"));
+        feeds.add(new FeedSeller(14.662287396654012, 120.56529244192595, "RC's Animal Feeds Trading"));
+        feeds.add(new FeedSeller(14.592451964805823, 120.5878109546487, "BFF PET AND POULTRY SUPPLIES"));
 
         computeFeedDistances(feeds, userLat, userLng);
 
@@ -291,11 +285,21 @@ public class Maps extends Fragment {
         FolderOverlay feedLayer = new FolderOverlay(getActivity());
         mapView.getOverlays().add(feedLayer);
 
-        for (FeedSeller f : feeds) {
+        for (int i = 0; i < feeds.size(); i++) {
+
+            FeedSeller f = feeds.get(i);
 
             Marker marker = new Marker(mapView);
             marker.setPosition(new GeoPoint(f.lat, f.lng));
-            marker.setTitle(f.name);
+
+            marker.setTitle("🌾 Feed Seller: " + f.name);
+
+            if (i == 0) {
+                marker.setSnippet("NEAREST FEED STORE");
+            } else {
+                marker.setSnippet("Agrivet / Feed Store");
+            }
+
             marker.setIcon(feedIcon);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
