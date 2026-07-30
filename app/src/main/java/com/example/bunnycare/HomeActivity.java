@@ -27,7 +27,7 @@ public class HomeActivity extends AppCompatActivity {
         }
 
         btnCommunity.setOnClickListener(v -> changeFragment(new Community()));
-        btnNotification.setOnClickListener(v -> changeFragment(new Notification()));
+        btnNotification.setOnClickListener(v -> changeFragment(new Monitoring()));
         btnCamera.setOnClickListener(v -> changeFragment(new Camera()));
         btnMaps.setOnClickListener(v -> changeFragment(new Maps()));
         btnAccount.setOnClickListener(v -> changeFragment(new Account()));
