@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/menu_last_fed"
+        android:title="Update Last Fed Food" />
+
+    <item
+        android:id="@+id/menu_last_drink"
+        android:title="Update Last Drink" />
+
+    <item
+        android:id="@+id/menu_change_photo"
+        android:title="Change Photo" />
+
+    <item
+        android:id="@+id/menu_rabbit_qr"
+        android:title="QR Options" />
+
+</menu>

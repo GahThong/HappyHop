@@ -1,18 +1,20 @@
 package com.example.bunnycare;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-
-import java.util.ArrayList;
-
 public class Rabbit {
 
     private String id;
+    private String ownerId;
     private String rabbitName;
+    private String breed;
     private String imageUrl;
+    private String lastFedFood;
+    private String lastDrink;
+    private String qrImage;
     private boolean hasQr;
 
-    public Rabbit() {}
+    public Rabbit() {
+        // Required empty constructor for Firestore
+    }
 
     public String getId() {
         return id;
@@ -20,6 +22,14 @@ public class Rabbit {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
     }
 
     public String getRabbitName() {
@@ -30,12 +40,44 @@ public class Rabbit {
         this.rabbitName = rabbitName;
     }
 
+    public String getBreed() {
+        return breed;
+    }
+
+    public void setBreed(String breed) {
+        this.breed = breed;
+    }
+
     public String getImageUrl() {
         return imageUrl;
     }
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public String getLastFedFood() {
+        return lastFedFood;
+    }
+
+    public void setLastFedFood(String lastFedFood) {
+        this.lastFedFood = lastFedFood;
+    }
+
+    public String getLastDrink() {
+        return lastDrink;
+    }
+
+    public void setLastDrink(String lastDrink) {
+        this.lastDrink = lastDrink;
+    }
+
+    public String getQrImage() {
+        return qrImage;
+    }
+
+    public void setQrImage(String qrImage) {
+        this.qrImage = qrImage;
     }
 
     public boolean isHasQr() {

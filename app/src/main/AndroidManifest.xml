@@ -52,10 +52,6 @@
             android:exported="true"/>
 
         <activity
-            android:name=".NotificationActivity"
-            android:exported="false"/>
-
-        <activity
             android:name=".CommunityActivity"
             android:exported="false"/>
 

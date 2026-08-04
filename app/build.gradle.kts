@@ -16,7 +16,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -67,11 +70,18 @@ dependencies {
     implementation("com.cloudinary:cloudinary-android:3.0.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.google.guava:guava:33.2.1-android")
     annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.firebase:firebase-storage:20.3.0")
+    implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
+    implementation("com.google.firebase:firebase-ai")
+    implementation("com.google.firebase:firebase-appcheck-debug")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
+    implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

@@ -15,12 +15,19 @@ import java.util.List;
 
 public class RabbitAdapter extends RecyclerView.Adapter<RabbitAdapter.RabbitViewHolder> {
 
+    public interface OnRabbitItemListener {
+        void onRabbitTap(Rabbit rabbit, View anchorView);
+        void onRabbitLongPress(Rabbit rabbit);
+    }
+
     private Context context;
     private List<Rabbit> rabbitList;
+    private OnRabbitItemListener listener;
 
-    public RabbitAdapter(Context context, List<Rabbit> rabbitList) {
+    public RabbitAdapter(Context context, List<Rabbit> rabbitList, OnRabbitItemListener listener) {
         this.context = context;
         this.rabbitList = rabbitList;
+        this.listener = listener;
     }
 
     @NonNull
@@ -44,6 +51,19 @@ public class RabbitAdapter extends RecyclerView.Adapter<RabbitAdapter.RabbitView
         holder.imgQrBadge.setVisibility(
                 rabbit.isHasQr() ? View.VISIBLE : View.GONE
         );
+
+        holder.itemView.setOnClickListener(v -> {
+            if (listener != null) {
+                listener.onRabbitTap(rabbit, v);
+            }
+        });
+
+        holder.itemView.setOnLongClickListener(v -> {
+            if (listener != null) {
+                listener.onRabbitLongPress(rabbit);
+            }
+            return true;
+        });
     }
 
     @Override

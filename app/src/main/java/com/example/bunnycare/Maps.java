@@ -89,6 +89,9 @@ public class Maps extends Fragment {
                 PreferenceManager.getDefaultSharedPreferences(getActivity())
         );
 
+
+        Configuration.getInstance().setUserAgentValue(getActivity().getPackageName());
+
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(getActivity());
 
         mapView = view.findViewById(R.id.mapView);

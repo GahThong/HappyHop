@@ -208,9 +208,6 @@ public class Account extends Fragment {
                 showAccountSettings();
             }
 
-            if (id == R.id.menu_qr) {
-                showQRMenu();
-            }
 
             if (id == R.id.menu_logout) {
 
@@ -324,52 +321,6 @@ public class Account extends Fragment {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
-    }
-
-    private void showQRMenu() {
-
-        String[] options = {"Generate QR", "Scan QR", "QRImageUpload"};
-
-        new AlertDialog.Builder(getContext())
-                .setTitle("QR Options")
-                .setItems(options, (d, i) -> {
-
-                    if (i == 0) {
-                        generateQR();
-                    }
-
-                    if (i == 1) {
-                        scanQR();
-                    }
-
-                    if (i == 2) {
-                        openQRImageUpload();
-                    }
-                })
-                .show();
-    }
-
-    private void generateQR() {
-
-        Intent intent = new Intent(getActivity(), QRActivity.class);
-
-        intent.putExtra("data", user.getUid());
-
-        startActivity(intent);
-    }
-
-    private void scanQR() {
-
-        IntentIntegrator.forSupportFragment(this).initiateScan();
-    }
-
-    private void openQRImageUpload() {
-
-        Intent intent = new Intent(Intent.ACTION_PICK);
-
-        intent.setType("image/*");
-
-        startActivityForResult(intent, 2001);
     }
 
     private void showFloatingImage(String imageUrl) {

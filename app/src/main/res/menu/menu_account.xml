@@ -8,9 +8,6 @@
         android:id="@+id/menu_account_setting"
         android:title="Account Setting"/>
     <item
-        android:id="@+id/menu_qr"
-        android:title="QR"/>
-    <item
         android:id="@+id/menu_logout"
         android:title="Log Out"/>
 
