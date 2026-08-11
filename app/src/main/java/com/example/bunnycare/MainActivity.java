@@ -8,10 +8,14 @@ import android.view.Window;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.cloudinary.android.MediaManager;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.appcheck.FirebaseAppCheck;
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory;
 import com.google.firebase.auth.FirebaseAuth;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -36,8 +40,8 @@ public class MainActivity extends AppCompatActivity {
         FirebaseApp.initializeApp(this);
 
         FirebaseAppCheck firebaseAppCheck = FirebaseAppCheck.getInstance();
-
         firebaseAppCheck.installAppCheckProviderFactory(
+
                 DebugAppCheckProviderFactory.getInstance()
         );
 
@@ -58,4 +62,5 @@ public class MainActivity extends AppCompatActivity {
             });
         }
     }
+    
 }

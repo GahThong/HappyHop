@@ -11,9 +11,9 @@ public class MyApp extends Application {
     public void onCreate() {
         super.onCreate();
 
-        Map<String, Object> config = new HashMap<>();
+        initCloudinary();
 
-
-        MediaManager.init(this, config);
     }
+
+    private void initCloudinary() { Map config = new HashMap(); config.put("cloud_name", "dpxjb2acm"); MediaManager.init(this, config); }
 }
