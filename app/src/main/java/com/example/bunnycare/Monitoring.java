@@ -56,7 +56,13 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
     private RecyclerView recyclerView;
     private RabbitAdapter adapter;
     private List<Rabbit> rabbitList;
-    private ImageButton fabAddRabbit;
+
+    // Header "+" button (top-right, always visible)
+    private ImageButton btnAddRabbitHeader;
+
+    // Empty-state views, shown/hidden based on whether rabbitList is empty
+    private View emptyState;
+    private View btnAddFirstRabbit;
 
     private final Executor geminiExecutor = Executors.newSingleThreadExecutor();
 
@@ -143,14 +149,20 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
         adapter = new RabbitAdapter(requireContext(), rabbitList, this);
         recyclerView.setAdapter(adapter);
 
-        fabAddRabbit = view.findViewById(R.id.fabAddRabbit);
+        emptyState = view.findViewById(R.id.emptyState);
+        btnAddFirstRabbit = view.findViewById(R.id.btnAddFirstRabbit);
+        btnAddRabbitHeader = view.findViewById(R.id.btnAddRabbitHeader);
 
-        // Launch for a result instead of a plain startActivity, so we can find
-        // out which rabbit was just created and jump to it.
-        fabAddRabbit.setOnClickListener(v -> {
+        View.OnClickListener launchAddRabbit = v -> {
             Intent intent = new Intent(requireActivity(), AddRabbitActivity.class);
             addRabbitLauncher.launch(intent);
-        });
+        };
+
+        // Both entry points do the same thing: header "+" (always visible)
+        // and the empty-state "Add your first rabbit" button (only visible
+        // when the list is empty).
+        btnAddRabbitHeader.setOnClickListener(launchAddRabbit);
+        btnAddFirstRabbit.setOnClickListener(launchAddRabbit);
 
         loadRabbits(null);
     }
@@ -163,6 +175,17 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
     public void onResume() {
         super.onResume();
         loadRabbits(this::scrollAndHighlightIfNeeded);
+    }
+
+    // ---------------------------------------------------------------------
+    // Show the empty state when there are no rabbits, otherwise show the list
+    // ---------------------------------------------------------------------
+    private void updateEmptyState() {
+        if (emptyState == null || recyclerView == null) return;
+
+        boolean isEmpty = rabbitList == null || rabbitList.isEmpty();
+        emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        recyclerView.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
     }
 
     // ---------------------------------------------------------------------
@@ -602,6 +625,7 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
                     }
 
                     adapter.notifyDataSetChanged();
+                    updateEmptyState();
 
                     if (onComplete != null) {
                         onComplete.run();

@@ -38,8 +38,6 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
 
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
@@ -47,315 +45,921 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AddRabbitActivity extends AppCompatActivity {
 
-    private ImageButton btnBack, btnUploadPhoto, btnUploadQr;
-    private EditText editRabbitName, editAge, editWeight, editLastFed, editLastDrink;
+    private ImageButton btnUploadPhoto;
+
+    private Button btnGenerateSummary;
+    private Button btnSaveRabbit;
+
+    private EditText editRabbitName;
+    private EditText editBreed;
+    private EditText editAge;
+    private EditText editLastFed;
+    private EditText editLastDrink;
+
     private TextView txtAiSummary;
+    private TextView txtWeightTrend;
+
     private ProgressBar progressAiSummary;
-    private Button btnGenerateSummary, btnSaveRabbit;
+    private View weightTrendCard;
 
     private FirebaseFirestore db;
     private DocumentReference rabbitRef;
-    private final Executor geminiExecutor = Executors.newSingleThreadExecutor();
+
+    private final ExecutorService geminiExecutor =
+            Executors.newSingleThreadExecutor();
 
     private final SimpleDateFormat displayFormat =
-            new SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault());
+            new SimpleDateFormat(
+                    "MMM d, yyyy h:mm a",
+                    Locale.getDefault()
+            );
 
     private String photoUrl = null;
     private Bitmap photoBitmap = null;
-    private String qrImageUrl = null;
-    private boolean hasQr = false;
+    private String weightValue = "";
 
     private Long lastFedMillis = null;
     private Long lastDrinkMillis = null;
 
-    private static final int TARGET_PHOTO = 1;
-    private static final int TARGET_QR = 2;
-    private int pendingImageTarget = 0;
+    private final ActivityResultLauncher<Intent> imagePickerLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
 
-    private ActivityResultLauncher<Intent> imagePickerLauncher;
+                        if (result.getResultCode() != RESULT_OK) {
+                            return;
+                        }
+
+                        if (result.getData() == null) {
+                            return;
+                        }
+
+                        Uri uri = result.getData().getData();
+
+                        if (uri == null) {
+                            return;
+                        }
+
+                        photoBitmap = decodeUri(uri);
+
+                        uploadImageToCloudinary(uri);
+                    }
+            );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_add_rabbit);
 
         db = FirebaseFirestore.getInstance();
-        rabbitRef = db.collection("rabbits").document();
+
+        rabbitRef =
+                db.collection("rabbits").document();
 
         bindViews();
-        registerImagePicker();
         setListeners();
     }
 
     private void bindViews() {
-        btnBack = findViewById(R.id.btnBack);
-        btnUploadPhoto = findViewById(R.id.btnUploadPhoto);
-        btnUploadQr = findViewById(R.id.btnUploadQr);
-        editRabbitName = findViewById(R.id.editRabbitName);
-        editAge = findViewById(R.id.editAge);
-        editWeight = findViewById(R.id.editWeight);
-        editLastFed = findViewById(R.id.editLastFed);
-        editLastDrink = findViewById(R.id.editLastDrink);
-        txtAiSummary = findViewById(R.id.txtAiSummary);
-        progressAiSummary = findViewById(R.id.progressAiSummary);
-        btnGenerateSummary = findViewById(R.id.btnGenerateSummary);
-        btnSaveRabbit = findViewById(R.id.btnSaveRabbit);
+
+        btnUploadPhoto =
+                findViewById(R.id.btnUploadPhoto);
+
+        btnGenerateSummary =
+                findViewById(R.id.btnGenerateSummary);
+
+        btnSaveRabbit =
+                findViewById(R.id.btnSaveRabbit);
+
+        editRabbitName =
+                findViewById(R.id.editRabbitName);
+
+        editBreed =
+                findViewById(R.id.editBreed);
+
+        editAge =
+                findViewById(R.id.editAge);
+
+        editLastFed =
+                findViewById(R.id.editLastFed);
+
+        editLastDrink =
+                findViewById(R.id.editLastDrink);
+
+        txtAiSummary =
+                findViewById(R.id.txtAiSummary);
+
+        txtWeightTrend =
+                findViewById(R.id.txtWeightTrend);
+
+        progressAiSummary =
+                findViewById(R.id.progressAiSummary);
+
+        weightTrendCard =
+                findViewById(R.id.weightTrendCard);
     }
 
     private void setListeners() {
-        btnBack.setOnClickListener(v -> finish());
 
-        btnUploadPhoto.setOnClickListener(v -> pickImage(TARGET_PHOTO));
+        btnUploadPhoto.setOnClickListener(v ->
+                pickPhoto()
+        );
 
-        btnUploadQr.setOnClickListener(v -> showQrMenu());
+        editLastFed.setOnClickListener(v ->
+                showDateTimePicker(millis -> {
 
-        editLastFed.setOnClickListener(v -> showDateTimePicker(millis -> {
-            lastFedMillis = millis;
-            editLastFed.setText(displayFormat.format(millis));
-        }));
+                    lastFedMillis = millis;
 
-        editLastDrink.setOnClickListener(v -> showDateTimePicker(millis -> {
-            lastDrinkMillis = millis;
-            editLastDrink.setText(displayFormat.format(millis));
-        }));
+                    editLastFed.setText(
+                            displayFormat.format(millis)
+                    );
+                })
+        );
 
-        btnGenerateSummary.setOnClickListener(v -> generateAiSummary());
+        editLastDrink.setOnClickListener(v ->
+                showDateTimePicker(millis -> {
 
-        btnSaveRabbit.setOnClickListener(v -> saveRabbit());
+                    lastDrinkMillis = millis;
+
+                    editLastDrink.setText(
+                            displayFormat.format(millis)
+                    );
+                })
+        );
+
+        weightTrendCard.setOnClickListener(v ->
+                showWeightDialog()
+        );
+
+        btnGenerateSummary.setOnClickListener(v ->
+                generateAiSummary()
+        );
+
+        btnSaveRabbit.setOnClickListener(v ->
+                saveRabbit()
+        );
     }
 
-    private void registerImagePicker() {
-        imagePickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
-                    Uri uri = result.getData().getData();
-                    if (uri == null) return;
+    private void pickPhoto() {
 
-                    if (pendingImageTarget == TARGET_PHOTO) {
-                        photoBitmap = decodeUri(uri);
-                        uploadImageToCloudinary(uri, TARGET_PHOTO);
-                    } else if (pendingImageTarget == TARGET_QR) {
-                        uploadImageToCloudinary(uri, TARGET_QR);
-                    }
-                });
-    }
+        Intent intent =
+                new Intent(Intent.ACTION_PICK);
 
-    private void pickImage(int target) {
-        pendingImageTarget = target;
-        Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");
+
         imagePickerLauncher.launch(intent);
     }
 
     private Bitmap decodeUri(Uri uri) {
-        try (InputStream input = getContentResolver().openInputStream(uri)) {
+
+        try (
+                InputStream input =
+                        getContentResolver()
+                                .openInputStream(uri)
+        ) {
+
             return BitmapFactory.decodeStream(input);
+
         } catch (Exception e) {
-            Log.e("AddRabbit", "Failed to decode picked image", e);
+
+            Log.e(
+                    "AddRabbit",
+                    "Failed to decode image",
+                    e
+            );
+
             return null;
         }
     }
 
-    private void uploadImageToCloudinary(Uri uri, int target) {
-        Toast.makeText(this, "Uploading image...", Toast.LENGTH_SHORT).show();
+    private void uploadImageToCloudinary(Uri uri) {
+
+        Toast.makeText(
+                this,
+                "Uploading photo...",
+                Toast.LENGTH_SHORT
+        ).show();
 
         MediaManager.get()
                 .upload(uri)
                 .unsigned("ml_default")
-                .callback(new UploadCallback() {
-                    @Override public void onStart(String requestId) {}
-                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
+                .callback(
+                        new UploadCallback() {
 
-                    @Override
-                    public void onSuccess(String requestId, Map resultData) {
-                        String secureUrl = (String) resultData.get("secure_url");
-                        runOnUiThread(() -> {
-                            if (target == TARGET_PHOTO) {
-                                photoUrl = secureUrl;
-                                Toast.makeText(AddRabbitActivity.this, "Photo uploaded", Toast.LENGTH_SHORT).show();
-                            } else if (target == TARGET_QR) {
-                                qrImageUrl = secureUrl;
-                                hasQr = secureUrl != null && !secureUrl.isEmpty();
-                                Toast.makeText(AddRabbitActivity.this, "QR image uploaded", Toast.LENGTH_SHORT).show();
+                            @Override
+                            public void onStart(
+                                    String requestId
+                            ) {
                             }
-                        });
-                    }
 
-                    @Override
-                    public void onError(String requestId, ErrorInfo error) {
-                        runOnUiThread(() -> Toast.makeText(AddRabbitActivity.this,
-                                "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show());
-                    }
+                            @Override
+                            public void onProgress(
+                                    String requestId,
+                                    long bytes,
+                                    long totalBytes
+                            ) {
+                            }
 
-                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
-                }).dispatch();
+                            @Override
+                            public void onSuccess(
+                                    String requestId,
+                                    Map resultData
+                            ) {
+
+                                String secureUrl =
+                                        (String) resultData.get(
+                                                "secure_url"
+                                        );
+
+                                runOnUiThread(() -> {
+
+                                    photoUrl =
+                                            secureUrl;
+
+                                    Toast.makeText(
+                                            AddRabbitActivity.this,
+                                            "Photo uploaded",
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                });
+                            }
+
+                            @Override
+                            public void onError(
+                                    String requestId,
+                                    ErrorInfo error
+                            ) {
+
+                                runOnUiThread(() ->
+                                        Toast.makeText(
+                                                AddRabbitActivity.this,
+                                                "Upload failed: "
+                                                        + error.getDescription(),
+                                                Toast.LENGTH_LONG
+                                        ).show()
+                                );
+                            }
+
+                            @Override
+                            public void onReschedule(
+                                    String requestId,
+                                    ErrorInfo error
+                            ) {
+                            }
+                        }
+                )
+                .dispatch();
     }
 
-    private void showQrMenu() {
-        String[] options = {"Generate QR", "Scan QR", "Upload QR Image"};
-        new AlertDialog.Builder(this)
-                .setTitle("QR Options")
-                .setItems(options, (dialog, which) -> {
-                    if (which == 0) {
-                        Intent intent = new Intent(this, QRActivity.class);
-                        intent.putExtra("data", rabbitRef.getId());
-                        startActivity(intent);
-                    } else if (which == 1) {
-                        new IntentIntegrator(this).initiateScan();
-                    } else if (which == 2) {
-                        pickImage(TARGET_QR);
-                    }
-                })
-                .show();
-    }
+    private void showWeightDialog() {
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
-        if (result != null && result.getContents() != null) {
-            Toast.makeText(this, "Scanned: " + result.getContents(), Toast.LENGTH_LONG).show();
-            return;
+        EditText input =
+                new EditText(this);
+
+        input.setHint("e.g. 1.9 kg");
+        input.setSingleLine(true);
+
+        if (!weightValue.isEmpty()) {
+
+            input.setText(weightValue);
+
+            input.setSelection(
+                    input.getText().length()
+            );
         }
-        super.onActivityResult(requestCode, resultCode, data);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Current Weight")
+                .setView(input)
+                .setPositiveButton(
+                        "Save",
+                        (dialog, which) -> {
+
+                            String weight =
+                                    input.getText()
+                                            .toString()
+                                            .trim();
+
+                            if (!weight.isEmpty()) {
+
+                                weightValue =
+                                        weight;
+
+                                txtWeightTrend.setText(
+                                        weight
+                                );
+                            }
+                        }
+                )
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
+                .show();
     }
 
     private interface OnDateTimePicked {
         void onPicked(long millis);
     }
 
-    private void showDateTimePicker(OnDateTimePicked callback) {
-        Calendar now = Calendar.getInstance();
+    private void showDateTimePicker(
+            OnDateTimePicked callback
+    ) {
 
-        DatePickerDialog datePicker = new DatePickerDialog(this,
-                (view, year, month, dayOfMonth) -> {
-                    Calendar date = Calendar.getInstance();
-                    date.set(Calendar.YEAR, year);
-                    date.set(Calendar.MONTH, month);
-                    date.set(Calendar.DAY_OF_MONTH, dayOfMonth);
+        Calendar now =
+                Calendar.getInstance();
 
-                    TimePickerDialog timePicker = new TimePickerDialog(this,
-                            (timeView, hourOfDay, minute) -> {
-                                date.set(Calendar.HOUR_OF_DAY, hourOfDay);
-                                date.set(Calendar.MINUTE, minute);
-                                date.set(Calendar.SECOND, 0);
-                                callback.onPicked(date.getTimeInMillis());
-                            },
-                            now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false);
-                    timePicker.show();
-                },
-                now.get(Calendar.YEAR), now.get(Calendar.MONTH), now.get(Calendar.DAY_OF_MONTH));
+        DatePickerDialog datePicker =
+                new DatePickerDialog(
+                        this,
+                        (view, year, month, dayOfMonth) -> {
+
+                            Calendar date =
+                                    Calendar.getInstance();
+
+                            date.set(
+                                    Calendar.YEAR,
+                                    year
+                            );
+
+                            date.set(
+                                    Calendar.MONTH,
+                                    month
+                            );
+
+                            date.set(
+                                    Calendar.DAY_OF_MONTH,
+                                    dayOfMonth
+                            );
+
+                            TimePickerDialog timePicker =
+                                    new TimePickerDialog(
+                                            this,
+                                            (timeView,
+                                             hourOfDay,
+                                             minute) -> {
+
+                                                date.set(
+                                                        Calendar.HOUR_OF_DAY,
+                                                        hourOfDay
+                                                );
+
+                                                date.set(
+                                                        Calendar.MINUTE,
+                                                        minute
+                                                );
+
+                                                date.set(
+                                                        Calendar.SECOND,
+                                                        0
+                                                );
+
+                                                callback.onPicked(
+                                                        date.getTimeInMillis()
+                                                );
+                                            },
+                                            now.get(
+                                                    Calendar.HOUR_OF_DAY
+                                            ),
+                                            now.get(
+                                                    Calendar.MINUTE
+                                            ),
+                                            false
+                                    );
+
+                            timePicker.show();
+                        },
+                        now.get(Calendar.YEAR),
+                        now.get(Calendar.MONTH),
+                        now.get(Calendar.DAY_OF_MONTH)
+                );
 
         datePicker.show();
     }
 
     private void generateAiSummary() {
-        String name = editRabbitName.getText().toString().trim();
+
+        String name =
+                editRabbitName
+                        .getText()
+                        .toString()
+                        .trim();
+
         if (name.isEmpty()) {
-            Toast.makeText(this, "Enter a name first", Toast.LENGTH_SHORT).show();
+
+            editRabbitName.setError(
+                    "Required"
+            );
+
+            editRabbitName.requestFocus();
+
             return;
         }
 
-        progressAiSummary.setVisibility(View.VISIBLE);
-        btnGenerateSummary.setEnabled(false);
-        txtAiSummary.setText("Generating...");
+        progressAiSummary.setVisibility(
+                View.VISIBLE
+        );
 
-        String age = editAge.getText().toString().trim();
-        String weight = editWeight.getText().toString().trim();
-        String lastFed = editLastFed.getText().toString().trim();
-        String lastDrink = editLastDrink.getText().toString().trim();
+        btnGenerateSummary.setEnabled(
+                false
+        );
 
-        geminiExecutor.execute(() -> sendToGemini(name, age, weight, lastFed, lastDrink, photoBitmap));
+        btnGenerateSummary.setText(
+                "Generating..."
+        );
+
+        txtAiSummary.setText(
+                "Gemini is analyzing your rabbit..."
+        );
+
+        String breed =
+                editBreed
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String age =
+                editAge
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String lastFed =
+                editLastFed
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String lastDrink =
+                editLastDrink
+                        .getText()
+                        .toString()
+                        .trim();
+
+        geminiExecutor.execute(() ->
+                sendToGemini(
+                        name,
+                        breed,
+                        age,
+                        weightValue,
+                        lastFed,
+                        lastDrink,
+                        photoBitmap
+                )
+        );
     }
 
-    private void sendToGemini(String name, String age, String weight,
-                              String lastFed, String lastDrink, @Nullable Bitmap photo) {
+    private void sendToGemini(
+            String name,
+            String breed,
+            String age,
+            String weight,
+            String lastFed,
+            String lastDrink,
+            @Nullable Bitmap photo
+    ) {
 
-        GenerativeModel firebaseAI = FirebaseAI.getInstance(GenerativeBackend.googleAI())
-                .generativeModel("gemini-3.5-flash-lite");
-        GenerativeModelFutures model = GenerativeModelFutures.from(firebaseAI);
+        try {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are a rabbit care expert. Write a short, practical health summary and care ")
-                .append("recommendation for a pet rabbit named \"").append(name).append("\".");
-        if (!age.isEmpty()) sb.append(" Age: ").append(age).append(".");
-        if (!weight.isEmpty()) sb.append(" Weight: ").append(weight).append(".");
-        if (!lastFed.isEmpty()) sb.append(" Last fed: ").append(lastFed).append(".");
-        if (!lastDrink.isEmpty()) sb.append(" Last had water: ").append(lastDrink).append(".");
-        sb.append(" Keep it concise, plain text, no JSON.");
+            GenerativeModel firebaseAI =
+                    FirebaseAI.getInstance(
+                            GenerativeBackend.googleAI()
+                    ).generativeModel(
+                            "gemini-3.5-flash-lite"
+                    );
 
-        Content.Builder contentBuilder = new Content.Builder().addText(sb.toString());
-        if (photo != null) contentBuilder.addImage(photo);
-        Content content = contentBuilder.build();
+            GenerativeModelFutures model =
+                    GenerativeModelFutures.from(
+                            firebaseAI
+                    );
 
-        ListenableFuture<GenerateContentResponse> response = model.generateContent(content);
-        Futures.addCallback(response, new FutureCallback<GenerateContentResponse>() {
-            @Override
-            public void onSuccess(GenerateContentResponse result) {
-                runOnUiThread(() -> {
-                    progressAiSummary.setVisibility(View.GONE);
-                    btnGenerateSummary.setEnabled(true);
-                    txtAiSummary.setText(result.getText());
-                });
+            StringBuilder prompt =
+                    new StringBuilder();
+
+            prompt.append(
+                    "You are a rabbit care expert. "
+                            + "Create a short practical AI health summary "
+                            + "for a pet rabbit named \""
+                            + name
+                            + "\"."
+            );
+
+            if (!breed.isEmpty()) {
+
+                prompt.append(
+                        " Breed: "
+                ).append(
+                        breed
+                ).append(".");
             }
 
-            @Override
-            public void onFailure(Throwable t) {
-                Log.e("AddRabbit", "Gemini summary failed", t);
-                runOnUiThread(() -> {
-                    progressAiSummary.setVisibility(View.GONE);
-                    btnGenerateSummary.setEnabled(true);
-                    txtAiSummary.setText("Couldn't generate a summary: " + t.getMessage());
-                });
+            if (!age.isEmpty()) {
+
+                prompt.append(
+                        " Age: "
+                ).append(
+                        age
+                ).append(".");
             }
-        }, geminiExecutor);
+
+            if (!weight.isEmpty()) {
+
+                prompt.append(
+                        " Current weight: "
+                ).append(
+                        weight
+                ).append(".");
+            }
+
+            if (!lastFed.isEmpty()) {
+
+                prompt.append(
+                        " Last fed: "
+                ).append(
+                        lastFed
+                ).append(".");
+            }
+
+            if (!lastDrink.isEmpty()) {
+
+                prompt.append(
+                        " Last water: "
+                ).append(
+                        lastDrink
+                ).append(".");
+            }
+
+            prompt.append(
+                    " Give a concise summary covering general condition, "
+                            + "feeding, hydration, weight monitoring, "
+                            + "and important things the owner should watch for."
+            );
+
+            prompt.append(
+                    " Do not diagnose diseases."
+            );
+
+            prompt.append(
+                    " If something seems concerning, recommend consulting "
+                            + "a qualified rabbit veterinarian."
+            );
+
+            prompt.append(
+                    " Keep the response short enough to display inside "
+                            + "a mobile app."
+            );
+
+            prompt.append(
+                    " Use plain text and no JSON."
+            );
+
+            Content.Builder contentBuilder =
+                    new Content.Builder()
+                            .addText(
+                                    prompt.toString()
+                            );
+
+            if (photo != null) {
+
+                contentBuilder.addImage(
+                        photo
+                );
+            }
+
+            Content content =
+                    contentBuilder.build();
+
+            ListenableFuture<GenerateContentResponse>
+                    response =
+                    model.generateContent(
+                            content
+                    );
+
+            Futures.addCallback(
+                    response,
+                    new FutureCallback<GenerateContentResponse>() {
+
+                        @Override
+                        public void onSuccess(
+                                GenerateContentResponse result
+                        ) {
+
+                            String text =
+                                    result.getText();
+
+                            runOnUiThread(() -> {
+
+                                progressAiSummary
+                                        .setVisibility(
+                                                View.GONE
+                                        );
+
+                                btnGenerateSummary
+                                        .setEnabled(
+                                                true
+                                        );
+
+                                btnGenerateSummary
+                                        .setText(
+                                                "Generate AI Summary"
+                                        );
+
+                                if (text != null
+                                        && !text.trim().isEmpty()) {
+
+                                    txtAiSummary.setText(
+                                            text
+                                    );
+
+                                } else {
+
+                                    txtAiSummary.setText(
+                                            "No summary was generated."
+                                    );
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onFailure(
+                                Throwable t
+                        ) {
+
+                            Log.e(
+                                    "AddRabbit",
+                                    "Gemini summary failed",
+                                    t
+                            );
+
+                            runOnUiThread(() -> {
+
+                                progressAiSummary
+                                        .setVisibility(
+                                                View.GONE
+                                        );
+
+                                btnGenerateSummary
+                                        .setEnabled(
+                                                true
+                                        );
+
+                                btnGenerateSummary
+                                        .setText(
+                                                "Generate AI Summary"
+                                        );
+
+                                txtAiSummary.setText(
+                                        "Couldn't generate a summary."
+                                );
+
+                                Toast.makeText(
+                                        AddRabbitActivity.this,
+                                        "AI error: "
+                                                + t.getMessage(),
+                                        Toast.LENGTH_LONG
+                                ).show();
+                            });
+                        }
+                    },
+                    geminiExecutor
+            );
+
+        } catch (Exception e) {
+
+            Log.e(
+                    "AddRabbit",
+                    "Gemini error",
+                    e
+            );
+
+            runOnUiThread(() -> {
+
+                progressAiSummary
+                        .setVisibility(
+                                View.GONE
+                        );
+
+                btnGenerateSummary
+                        .setEnabled(
+                                true
+                        );
+
+                btnGenerateSummary
+                        .setText(
+                                "Generate AI Summary"
+                        );
+
+                txtAiSummary.setText(
+                        "Couldn't generate a summary."
+                );
+
+                Toast.makeText(
+                        AddRabbitActivity.this,
+                        "AI error: " + e.getMessage(),
+                        Toast.LENGTH_LONG
+                ).show();
+            });
+        }
     }
 
     private void saveRabbit() {
-        String name = editRabbitName.getText().toString().trim();
+
+        String name =
+                editRabbitName
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String breed =
+                editBreed
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String age =
+                editAge
+                        .getText()
+                        .toString()
+                        .trim();
+
         if (name.isEmpty()) {
-            editRabbitName.setError("Required");
+
+            editRabbitName.setError(
+                    "Required"
+            );
+
+            editRabbitName.requestFocus();
+
             return;
         }
 
-        if (FirebaseAuth.getInstance().getCurrentUser() == null) {
-            Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show();
+        if (FirebaseAuth
+                .getInstance()
+                .getCurrentUser() == null) {
+
+            Toast.makeText(
+                    this,
+                    "Not signed in",
+                    Toast.LENGTH_SHORT
+            ).show();
+
             return;
         }
-        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-        Map<String, Object> map = new HashMap<>();
-        map.put("rabbitName", name);
-        map.put("age", editAge.getText().toString().trim());
-        map.put("weight", editWeight.getText().toString().trim());
-        map.put("lastFed", lastFedMillis != null ? displayFormat.format(lastFedMillis) : "");
-        map.put("lastDrink", lastDrinkMillis != null ? displayFormat.format(lastDrinkMillis) : "");
-        map.put("imageUrl", photoUrl);
-        map.put("qrImage", qrImageUrl);
-        map.put("hasQr", hasQr);
-        map.put("ownerId", uid);
-        map.put("createdAt", FieldValue.serverTimestamp());
+        String uid =
+                FirebaseAuth
+                        .getInstance()
+                        .getCurrentUser()
+                        .getUid();
 
-        btnSaveRabbit.setEnabled(false);
+        Map<String, Object> map =
+                new HashMap<>();
 
-        rabbitRef.set(map)
+        map.put(
+                "rabbitName",
+                name
+        );
+
+        map.put(
+                "breed",
+                breed
+        );
+
+        map.put(
+                "age",
+                age
+        );
+
+        map.put(
+                "weight",
+                weightValue
+        );
+
+        map.put(
+                "lastFed",
+                lastFedMillis != null
+                        ? displayFormat.format(
+                        lastFedMillis
+                )
+                        : editLastFed
+                        .getText()
+                        .toString()
+                        .trim()
+        );
+
+        map.put(
+                "lastDrink",
+                lastDrinkMillis != null
+                        ? displayFormat.format(
+                        lastDrinkMillis
+                )
+                        : editLastDrink
+                        .getText()
+                        .toString()
+                        .trim()
+        );
+
+        map.put(
+                "imageUrl",
+                photoUrl
+        );
+
+        map.put(
+                "ownerId",
+                uid
+        );
+
+        String aiSummary =
+                txtAiSummary
+                        .getText()
+                        .toString()
+                        .trim();
+
+        if (!aiSummary.isEmpty()
+                && !aiSummary.equals(
+                "Generate a summary to get personalized care recommendations."
+        )
+                && !aiSummary.equals(
+                "Gemini is analyzing your rabbit..."
+        )
+                && !aiSummary.equals(
+                "Couldn't generate a summary."
+        )) {
+
+            map.put(
+                    "aiSummary",
+                    aiSummary
+            );
+        }
+
+        map.put(
+                "createdAt",
+                FieldValue.serverTimestamp()
+        );
+
+        btnSaveRabbit.setEnabled(
+                false
+        );
+
+        btnSaveRabbit.setText(
+                "Saving..."
+        );
+
+        rabbitRef
+                .set(map)
                 .addOnSuccessListener(unused -> {
-                    Toast.makeText(this, "Rabbit saved", Toast.LENGTH_SHORT).show();
 
-                    Intent resultIntent = new Intent();
-                    resultIntent.putExtra("newRabbitId", rabbitRef.getId());
-                    setResult(RESULT_OK, resultIntent);
+                    Toast.makeText(
+                            this,
+                            "Rabbit saved",
+                            Toast.LENGTH_SHORT
+                    ).show();
+
+                    Intent resultIntent =
+                            new Intent();
+
+                    resultIntent.putExtra(
+                            "newRabbitId",
+                            rabbitRef.getId()
+                    );
+
+                    setResult(
+                            RESULT_OK,
+                            resultIntent
+                    );
 
                     finish();
                 })
                 .addOnFailureListener(e -> {
-                    btnSaveRabbit.setEnabled(true);
-                    Toast.makeText(this, "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+
+                    btnSaveRabbit.setEnabled(
+                            true
+                    );
+
+                    btnSaveRabbit.setText(
+                            "Save Rabbit"
+                    );
+
+                    Toast.makeText(
+                            this,
+                            "Save failed: "
+                                    + e.getMessage(),
+                            Toast.LENGTH_LONG
+                    ).show();
                 });
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        super.onDestroy();
+
+        geminiExecutor.shutdown();
     }
 }

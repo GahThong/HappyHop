@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/camerapage"
+
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/cream_bg">
+    android:background="#F5EBD0">
 
     <ImageView
         android:layout_width="match_parent"
-        android:layout_height="125dp"
+        android:layout_height="85dp"
         android:background="@color/Orangie"
         android:contentDescription="App Logo"
         android:scaleType="centerInside"
@@ -17,67 +18,155 @@
     <LinearLayout
         android:id="@+id/container"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"/>
+        android:layout_height="506dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="70dp"
-        android:orientation="horizontal"
-        android:background="@color/Orangie"
+        android:layout_height="82dp"
+        android:background="#FAF5E8"
         android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:elevation="8dp"
         android:weightSum="5">
 
-        <ImageButton
-            android:id="@+id/btnCommunity"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="50dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:src="@drawable/community"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="community" />
+            android:gravity="center"
+            android:orientation="vertical">
 
-        <ImageButton
-            android:id="@+id/btnNotification"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="1"
-            android:src="@drawable/notification"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="notification" />
+            <ImageButton
+                android:id="@+id/btnCommunity"
+                android:layout_width="66dp"
+                android:layout_height="59dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Community"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/community" />
 
-        <ImageButton
-            android:id="@+id/btnCamera"
-            android:layout_width="0dp"
-            android:layout_height="60dp"
-            android:layout_weight="1"
-            android:src="@drawable/camera"
-            android:background="@android:color/transparent"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:contentDescription="camera" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Community"
+                android:textColor="#B69A70"
+                android:textSize="9sp" />
 
-        <ImageButton
-            android:id="@+id/btnMaps"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="1"
-            android:src="@drawable/maps_icon"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="maps" />
+        </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/btnAccount"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="50dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:src="@drawable/account"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="account" />
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/btnNotification"
+                android:layout_width="58dp"
+                android:layout_height="60dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Rabbits"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/notification" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Rabbits"
+                android:textColor="#B69A70"
+                android:textSize="9sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/btnCamera"
+                android:layout_width="58dp"
+                android:layout_height="59dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Scan"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/camera" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Scan"
+                android:textColor="#B69A70"
+                android:textSize="9sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/btnMaps"
+                android:layout_width="66dp"
+                android:layout_height="55dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Map"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/maps_icon" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Map"
+                android:textColor="#B69A70"
+                android:textSize="9sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/btnAccount"
+                android:layout_width="51dp"
+                android:layout_height="55dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Profile"
+                android:padding="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/account" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Profile"
+                android:textColor="#B69A70"
+                android:textSize="9sp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

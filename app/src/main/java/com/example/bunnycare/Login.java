@@ -1,310 +1,264 @@
 package com.example.bunnycare;
 
 import android.content.Intent;
-import android.graphics.Paint;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Patterns;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.tasks.Task;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.auth.GoogleAuthProvider;
 
 public class Login extends AppCompatActivity {
 
-    private FirebaseAuth mAuth;
+    private EditText username;
+    private EditText password;
 
-    // Views
-    private EditText editTextEmail;
-    private TextInputEditText editTextPassword;
-    private CheckBox rememberMe;
-
-    private Button btnLogin;
-    private ProgressBar progressBar;
-    private TextView textSignUp, textForgotPassword;
+    private Button btnGoLogin;
     private ImageButton btnGoogleLogin;
 
-    private GoogleSignInClient googleSignInClient;
-    private ActivityResultLauncher<Intent> googleSignInLauncher;
+    private TextView btnLoginTab;
+    private TextView btnCreateAccount;
+    private TextView textSignUp;
+    private TextView forgotPass;
 
-    @Override
-    protected void onStart() {
-        super.onStart();
+    private ProgressBar progressBar;
 
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-
-        if (user != null) {
-            startActivity(new Intent(Login.this, HomeActivity.class));
-            finish();
-        }
-    }
+    private FirebaseAuth auth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_login);
 
-        mAuth = FirebaseAuth.getInstance();
+        auth = FirebaseAuth.getInstance();
 
-        // Initialize Views
-        editTextEmail = findViewById(R.id.username);
-        editTextPassword = findViewById(R.id.password);
-        rememberMe = findViewById(R.id.rememberMe);
+        username = findViewById(R.id.username);
+        password = findViewById(R.id.password);
 
-        btnLogin = findViewById(R.id.btnGoLogin);
-        progressBar = findViewById(R.id.progressBar);
-        textSignUp = findViewById(R.id.textSignUp);
-        textForgotPassword = findViewById(R.id.forgotPass);
+        btnGoLogin = findViewById(R.id.btnGoLogin);
         btnGoogleLogin = findViewById(R.id.btnGoogleLogin);
 
-        // Underline Sign Up
-        textSignUp.setPaintFlags(
-                textSignUp.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG
-        );
+        btnLoginTab = findViewById(R.id.btnLoginTab);
+        btnCreateAccount = findViewById(R.id.btnCreateAccount);
 
-        // Open Register Page
-        textSignUp.setOnClickListener(view ->
-                startActivity(new Intent(Login.this, Register.class))
-        );
+        textSignUp = findViewById(R.id.textSignUp);
+        forgotPass = findViewById(R.id.forgotPass);
 
-        // Forgot Password
-        textForgotPassword.setOnClickListener(view ->
-                showForgotPasswordDialog()
-        );
+        progressBar = findViewById(R.id.progressBar);
 
-        // Login Button
-        btnLogin.setOnClickListener(view ->
-                loginUser()
-        );
+        if (btnGoLogin != null) {
+            btnGoLogin.setOnClickListener(v -> loginUser());
+        }
 
-        // Google Sign In
-        GoogleSignInOptions gso =
-                new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken(getString(R.string.default_web_client_id))
-                        .requestEmail()
-                        .build();
+        if (btnLoginTab != null) {
+            btnLoginTab.setOnClickListener(v -> {
+            });
+        }
 
-        googleSignInClient = GoogleSignIn.getClient(this, gso);
+        if (btnCreateAccount != null) {
+            btnCreateAccount.setOnClickListener(v -> {
+                Intent intent = new Intent(
+                        Login.this,
+                        Register.class
+                );
 
-        googleSignInLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
+                startActivity(intent);
+                finish();
+            });
+        }
 
-                    if (result.getResultCode() == RESULT_OK) {
+        if (textSignUp != null) {
+            textSignUp.setOnClickListener(v -> {
+                Intent intent = new Intent(
+                        Login.this,
+                        Register.class
+                );
 
-                        Task<GoogleSignInAccount> task =
-                                GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                startActivity(intent);
+                finish();
+            });
+        }
 
-                        try {
+        if (forgotPass != null) {
+            forgotPass.setOnClickListener(v -> resetPassword());
+        }
 
-                            GoogleSignInAccount account =
-                                    task.getResult(ApiException.class);
+        if (btnGoogleLogin != null) {
+            btnGoogleLogin.setOnClickListener(v -> {
 
-                            firebaseAuthWithGoogle(account.getIdToken());
+                Toast.makeText(
+                        Login.this,
+                        "Google login is not configured yet.",
+                        Toast.LENGTH_SHORT
+                ).show();
 
-                        } catch (Exception e) {
-
-                            Toast.makeText(
-                                    Login.this,
-                                    "Google Sign-In Failed",
-                                    Toast.LENGTH_SHORT
-                            ).show();
-                        }
-                    }
-                });
-
-        btnGoogleLogin.setOnClickListener(view -> {
-            Intent signInIntent = googleSignInClient.getSignInIntent();
-            googleSignInLauncher.launch(signInIntent);
-        });
+            });
+        }
     }
 
     private void loginUser() {
 
-        String email = editTextEmail.getText().toString().trim();
-        String password = editTextPassword.getText().toString().trim();
+        String email = username.getText().toString().trim();
+        String pass = password.getText().toString().trim();
+
+        username.setError(null);
+        password.setError(null);
 
         if (TextUtils.isEmpty(email)) {
-            editTextEmail.setError("Email is required");
-            editTextEmail.requestFocus();
+            username.setError("Enter your email");
+            username.requestFocus();
             return;
         }
 
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            editTextEmail.setError("Enter a valid email");
-            editTextEmail.requestFocus();
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            username.setError("Enter a valid email");
+            username.requestFocus();
             return;
         }
 
-        if (TextUtils.isEmpty(password)) {
-            editTextPassword.setError("Password is required");
-            editTextPassword.requestFocus();
+        if (TextUtils.isEmpty(pass)) {
+            password.setError("Enter your password");
+            password.requestFocus();
             return;
         }
 
-        progressBar.setVisibility(View.VISIBLE);
+        showLoading(true);
 
-        mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(task -> {
+        auth.signInWithEmailAndPassword(email, pass)
+                .addOnCompleteListener(this, task -> {
 
-                    progressBar.setVisibility(View.GONE);
+                    showLoading(false);
 
                     if (task.isSuccessful()) {
 
-                        // Optional:
-                        if (rememberMe.isChecked()) {
-                            // Save login state using SharedPreferences if needed
-                        }
-
                         Toast.makeText(
                                 Login.this,
-                                "Login Successful",
+                                "Login successful",
                                 Toast.LENGTH_SHORT
                         ).show();
 
-                        startActivity(new Intent(Login.this, HomeActivity.class));
+                        Intent intent = new Intent(
+                                Login.this,
+                                HomeActivity.class
+                        );
+
+                        intent.addFlags(
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                                        Intent.FLAG_ACTIVITY_NEW_TASK
+                        );
+
+                        startActivity(intent);
                         finish();
 
                     } else {
 
+                        String message = "Login failed";
+
+                        if (task.getException() != null) {
+                            message =
+                                    task.getException().getMessage();
+                        }
+
                         Toast.makeText(
                                 Login.this,
-                                task.getException() != null
-                                        ? task.getException().getMessage()
-                                        : "Login Failed",
+                                message,
                                 Toast.LENGTH_LONG
                         ).show();
                     }
                 });
     }
 
-    private void firebaseAuthWithGoogle(String idToken) {
+    private void resetPassword() {
 
-        AuthCredential credential =
-                GoogleAuthProvider.getCredential(idToken, null);
+        String email = username.getText().toString().trim();
 
-        progressBar.setVisibility(View.VISIBLE);
+        if (TextUtils.isEmpty(email)) {
+            username.setError("Enter your email first");
+            username.requestFocus();
+            return;
+        }
 
-        mAuth.signInWithCredential(credential)
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            username.setError("Enter a valid email");
+            username.requestFocus();
+            return;
+        }
+
+        showLoading(true);
+
+        auth.sendPasswordResetEmail(email)
                 .addOnCompleteListener(this, task -> {
 
-                    progressBar.setVisibility(View.GONE);
+                    showLoading(false);
 
                     if (task.isSuccessful()) {
 
                         Toast.makeText(
                                 Login.this,
-                                "Google Login Successful",
-                                Toast.LENGTH_SHORT
+                                "Password reset email sent",
+                                Toast.LENGTH_LONG
                         ).show();
-
-                        startActivity(new Intent(Login.this, HomeActivity.class));
-                        finish();
 
                     } else {
 
+                        String message =
+                                "Unable to send reset email";
+
+                        if (task.getException() != null) {
+                            message =
+                                    task.getException().getMessage();
+                        }
+
                         Toast.makeText(
                                 Login.this,
-                                "Authentication Failed",
-                                Toast.LENGTH_SHORT
+                                message,
+                                Toast.LENGTH_LONG
                         ).show();
                     }
                 });
     }
 
-    private void showForgotPasswordDialog() {
+    private void showLoading(boolean loading) {
 
-        AlertDialog.Builder builder =
-                new AlertDialog.Builder(Login.this);
+        if (progressBar != null) {
+            progressBar.setVisibility(
+                    loading
+                            ? View.VISIBLE
+                            : View.GONE
+            );
+        }
 
-        builder.setTitle("Reset Password");
+        if (btnGoLogin != null) {
+            btnGoLogin.setEnabled(!loading);
+        }
 
-        final EditText input = new EditText(Login.this);
-        input.setHint("Enter your registered email");
-        input.setPadding(40, 30, 40, 30);
+        if (btnCreateAccount != null) {
+            btnCreateAccount.setEnabled(!loading);
+        }
 
-        builder.setView(input);
+        if (textSignUp != null) {
+            textSignUp.setEnabled(!loading);
+        }
 
-        builder.setPositiveButton("Send", null);
-        builder.setNegativeButton("Cancel",
-                (dialog, which) -> dialog.dismiss());
+        if (forgotPass != null) {
+            forgotPass.setEnabled(!loading);
+        }
 
-        AlertDialog dialog = builder.create();
+        if (btnLoginTab != null) {
+            btnLoginTab.setEnabled(!loading);
+        }
 
-        dialog.setOnShowListener(d -> {
-
-            Button sendBtn =
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-
-            sendBtn.setOnClickListener(v -> {
-
-                String email =
-                        input.getText().toString().trim();
-
-                if (TextUtils.isEmpty(email)) {
-                    input.setError("Email is required");
-                    return;
-                }
-
-                if (!android.util.Patterns.EMAIL_ADDRESS
-                        .matcher(email)
-                        .matches()) {
-
-                    input.setError("Enter a valid email");
-                    return;
-                }
-
-                progressBar.setVisibility(View.VISIBLE);
-
-                mAuth.sendPasswordResetEmail(email)
-                        .addOnCompleteListener(task -> {
-
-                            progressBar.setVisibility(View.GONE);
-
-                            if (task.isSuccessful()) {
-
-                                Toast.makeText(
-                                        Login.this,
-                                        "Password reset email sent. Check your inbox.",
-                                        Toast.LENGTH_LONG
-                                ).show();
-
-                                dialog.dismiss();
-
-                            } else {
-
-                                Toast.makeText(
-                                        Login.this,
-                                        task.getException() != null
-                                                ? task.getException().getMessage()
-                                                : "Failed to send email",
-                                        Toast.LENGTH_LONG
-                                ).show();
-                            }
-                        });
-            });
-        });
-
-        dialog.show();
+        if (btnGoogleLogin != null) {
+            btnGoogleLogin.setEnabled(!loading);
+        }
     }
 }

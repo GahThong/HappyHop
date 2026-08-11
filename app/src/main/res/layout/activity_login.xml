@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/cream_bg"
+    android:background="#F5EBD0"
     android:fillViewport="true">
 
     <LinearLayout
@@ -12,7 +13,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="100dp"
@@ -33,7 +33,41 @@
 
         </LinearLayout>
 
-        <!-- Form content -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="28dp"
+            android:background="@drawable/button_login_bg"
+            android:orientation="horizontal"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/btnLoginTab"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/login_tab_selected"
+                android:gravity="center"
+                android:text="Log In"
+                android:textColor="@color/black"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnCreateAccount"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="Create Account"
+                android:textColor="#8F7458"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -42,15 +76,7 @@
             android:paddingStart="28dp"
             android:paddingTop="16dp"
             android:paddingEnd="28dp"
-            android:paddingBottom="20dp">
-
-            <ImageView
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginBottom="6dp"
-                android:contentDescription="Log in"
-                android:scaleType="fitCenter"
-                android:src="@drawable/login" />
+            android:paddingBottom="30dp">
 
             <FrameLayout
                 android:layout_width="60dp"
@@ -58,8 +84,8 @@
                 android:layout_marginBottom="10dp">
 
                 <ImageView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
                     android:layout_gravity="center"
                     android:contentDescription="Profile Icon"
                     android:src="@drawable/account" />
@@ -70,35 +96,40 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Email"
-                android:textColor="@color/black"
-                android:textSize="14sp" />
+                android:textColor="#8F7458"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/username"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="10dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginBottom="12dp"
                 android:background="@drawable/edittext_bg"
                 android:elevation="2dp"
-                android:inputType="text"
+                android:hint="you@email.com"
+                android:inputType="textEmailAddress"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:textColor="@color/black"
+                android:textColorHint="#A58C70"
                 android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Password"
-                android:textColor="@color/black"
-                android:textSize="14sp" />
+                android:textColor="#8F7458"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="10dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginBottom="6dp"
+                app:boxBackgroundMode="none"
                 app:endIconMode="password_toggle">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -115,77 +146,33 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <TextView
+                android:id="@+id/forgotPass"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Re-Enter Password"
-                android:textColor="@color/black"
-                android:textSize="14sp" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="8dp"
-                app:endIconMode="password_toggle">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/reEnterPassword"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@drawable/edittext_bg"
-                    android:inputType="textPassword"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:textColor="@color/black"
-                    android:textSize="14sp" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <CheckBox
-                    android:id="@+id/rememberMe"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Remember me"
-                    android:textColor="@color/black"
-                    android:textSize="13sp" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <TextView
-                    android:id="@+id/forgotPass"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Forgot Password"
-                    android:textColor="@color/black"
-                    android:textSize="13sp" />
-
-            </LinearLayout>
+                android:gravity="end"
+                android:paddingTop="3dp"
+                android:paddingBottom="8dp"
+                android:text="Forgot password?"
+                android:textColor="@color/Orangie"
+                android:textSize="12sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnGoLogin"
                 style="@style/Widget.AppCompat.Button"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/button_register_bg"
                 android:backgroundTint="@null"
                 android:elevation="4dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:stateListAnimator="@null"
-                android:text="Log in"
+                android:text="Log In"
                 android:textAllCaps="false"
                 android:textColor="@color/black"
-                android:textSize="17sp"
+                android:textSize="16sp"
                 android:textStyle="bold"
                 app:backgroundTint="@null" />
 
@@ -193,9 +180,9 @@
                 android:id="@+id/textSignUp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="12dp"
                 android:text="New here? Create account"
-                android:textColor="@color/black"
+                android:textColor="#8F7458"
                 android:textSize="13sp" />
 
             <ProgressBar
@@ -206,13 +193,13 @@
                 android:visibility="gone" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:gravity="center"
-                android:text="──────── Or log in with ────────"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                android:text="────────  Or log in with  ────────"
+                android:textColor="#B69A70"
+                android:textSize="12sp" />
 
             <ImageButton
                 android:id="@+id/btnGoogleLogin"
@@ -221,6 +208,7 @@
                 android:layout_marginTop="10dp"
                 android:background="@android:color/transparent"
                 android:contentDescription="Google login"
+                android:padding="4dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/google" />
 

@@ -1,15 +1,17 @@
 package com.example.bunnycare;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.bumptech.glide.Glide;
 
 import java.util.List;
 
@@ -20,9 +22,12 @@ public class RabbitAdapter extends RecyclerView.Adapter<RabbitAdapter.RabbitView
         void onRabbitLongPress(Rabbit rabbit);
     }
 
-    private Context context;
-    private List<Rabbit> rabbitList;
-    private OnRabbitItemListener listener;
+    private static final String COLOR_HEALTHY = "#4CAF50";
+    private static final String COLOR_ATTENTION = "#D9534F";
+
+    private final Context context;
+    private final List<Rabbit> rabbitList;
+    private final OnRabbitItemListener listener;
 
     public RabbitAdapter(Context context, List<Rabbit> rabbitList, OnRabbitItemListener listener) {
         this.context = context;
@@ -33,28 +38,40 @@ public class RabbitAdapter extends RecyclerView.Adapter<RabbitAdapter.RabbitView
     @NonNull
     @Override
     public RabbitViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(context)
-                .inflate(R.layout.item_rabbit_card, parent, false);
+        View view = LayoutInflater.from(context).inflate(R.layout.item_rabbit_card, parent, false);
         return new RabbitViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull RabbitViewHolder holder, int position) {
-
         Rabbit rabbit = rabbitList.get(position);
 
-        holder.txtRabbitName.setText(rabbit.getRabbitName());
+        holder.txtRabbitName.setText(
+                rabbit.getRabbitName() == null || rabbit.getRabbitName().isEmpty()
+                        ? "Unnamed rabbit"
+                        : rabbit.getRabbitName());
 
-        // TODO: Load image using Glide/Picasso if imageUrl exists
-        // Glide.with(context).load(rabbit.getImageUrl()).into(holder.imgRabbit);
+        holder.txtRabbitBreedAge.setText(rabbit.getBreedAgeLabel());
 
-        holder.imgQrBadge.setVisibility(
-                rabbit.isHasQr() ? View.VISIBLE : View.GONE
-        );
+        if (rabbit.getImageUrl() != null && !rabbit.getImageUrl().isEmpty()) {
+            Glide.with(context)
+                    .load(rabbit.getImageUrl())
+                    .placeholder(R.drawable.rabbit_thumb_bg)
+                    .error(R.drawable.rabbit_thumb_bg)
+                    .into(holder.imgRabbit);
+        } else {
+            holder.imgRabbit.setImageDrawable(null);
+            holder.imgRabbit.setBackgroundResource(R.drawable.rabbit_thumb_bg);
+        }
+
+        holder.statusDot.getBackground().setTint(
+                Color.parseColor(rabbit.isHealthy() ? COLOR_HEALTHY : COLOR_ATTENTION));
+
+        holder.imgQrBadge.setVisibility(rabbit.isHasQr() ? View.VISIBLE : View.GONE);
 
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) {
-                listener.onRabbitTap(rabbit, v);
+                listener.onRabbitTap(rabbit, holder.itemView);
             }
         });
 
@@ -68,25 +85,24 @@ public class RabbitAdapter extends RecyclerView.Adapter<RabbitAdapter.RabbitView
 
     @Override
     public int getItemCount() {
-        return rabbitList.size();
+        return rabbitList == null ? 0 : rabbitList.size();
     }
 
     static class RabbitViewHolder extends RecyclerView.ViewHolder {
 
         ImageView imgRabbit;
-        ImageView imgQrBadge;
         TextView txtRabbitName;
-        ImageButton btnEditRabbit;
-        ImageButton btnDeleteRabbit;
+        TextView txtRabbitBreedAge;
+        View statusDot;
+        ImageView imgQrBadge;
 
-        public RabbitViewHolder(@NonNull View itemView) {
+        RabbitViewHolder(@NonNull View itemView) {
             super(itemView);
-
             imgRabbit = itemView.findViewById(R.id.imgRabbit);
-            imgQrBadge = itemView.findViewById(R.id.imgQrBadge);
             txtRabbitName = itemView.findViewById(R.id.txtRabbitName);
-            btnEditRabbit = itemView.findViewById(R.id.btnEditRabbit);
-            btnDeleteRabbit = itemView.findViewById(R.id.btnDeleteRabbit);
+            txtRabbitBreedAge = itemView.findViewById(R.id.txtRabbitBreedAge);
+            statusDot = itemView.findViewById(R.id.statusDot);
+            imgQrBadge = itemView.findViewById(R.id.imgQrBadge);
         }
     }
 }

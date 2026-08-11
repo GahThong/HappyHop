@@ -1,253 +1,372 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/cream_bg"
-    android:orientation="vertical">
-
-    <!-- Header -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="120dp"
-        android:background="@color/Orangie"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
-
-        <ImageView
-            android:layout_width="90dp"
-            android:layout_height="90dp"
-            android:contentDescription="Bunny Logo"
-            android:scaleType="centerInside"
-            android:src="@drawable/bunny" />
-
-        <ImageView
-            android:layout_width="0dp"
-            android:layout_height="70dp"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:contentDescription="HappyHop Logo Text"
-            android:scaleType="fitCenter"
-            android:src="@drawable/logo" />
-
-    </LinearLayout>
+    android:orientation="vertical"
+    android:background="@color/cream_bg">
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/card_bg"
-            android:layout_margin="16dp"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="28dp"
+            android:paddingEnd="28dp"
+            android:paddingTop="22dp"
+            android:paddingBottom="28dp">
+
+            <TextView
+                android:id="@+id/txtScreenTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Edit Rabbit"
+                android:textColor="@color/black"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="sans"
+                android:layout_marginBottom="20dp" />
 
             <ImageButton
-                android:id="@+id/btnBack"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginBottom="10dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="Back"
-                android:src="@drawable/ic_arrow_back" />
+                android:id="@+id/btnUploadPhoto"
+                android:layout_width="92dp"
+                android:layout_height="92dp"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/rabbit_photo_border"
+                android:contentDescription="Upload rabbit photo"
+                android:padding="18dp"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_pets" />
 
-            <!-- Photo, name, QR row -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="NAME"
+                android:textColor="@color/black"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+
+            <EditText
+                android:id="@+id/editRabbitName"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/rabbit_input_bg"
+                android:hint="Rabbit's Name"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:singleLine="true"
+                android:textColor="@color/black"
+                android:textColorHint="#77705F"
+                android:textSize="14sp" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:layout_marginTop="14dp"
                 android:orientation="horizontal">
 
-                <ImageButton
-                    android:id="@+id/btnUploadPhoto"
-                    android:layout_width="90dp"
-                    android:layout_height="90dp"
-                    android:background="@drawable/card_bg"
-                    android:contentDescription="Upload rabbit photo"
-                    android:padding="6dp"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/ic_pets" />
-
-                <EditText
-                    android:id="@+id/editRabbitName"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
                     android:layout_weight="1"
-                    android:background="@null"
-                    android:hint="Rabbit's Name"
-                    android:textColor="@color/black"
-                    android:textSize="20sp" />
+                    android:orientation="vertical">
 
-                <ImageButton
-                    android:id="@+id/btnUploadQr"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="Upload vet records QR"
-                    android:src="@drawable/ic_qr_placeholder" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="BREED"
+                        android:textColor="@color/black"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08" />
+
+                    <EditText
+                        android:id="@+id/editBreed"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/rabbit_input_bg"
+                        android:hint="Breed"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/black"
+                        android:textColorHint="#77705F"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <Space
+                    android:layout_width="10dp"
+                    android:layout_height="1dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="AGE"
+                        android:textColor="@color/black"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08" />
+
+                    <EditText
+                        android:id="@+id/editAge"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/rabbit_input_bg"
+                        android:hint="e.g. 1.5 yrs"
+                        android:inputType="text"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/black"
+                        android:textColorHint="#77705F"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Tap the QR icon to upload or scan past vet medical records"
-                android:textColor="@color/black"
-                android:textSize="11sp" />
-
-            <!-- Quick input fields -->
-            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:text="Age"
+                android:layout_marginTop="17dp"
+                android:text="WEIGHT TREND"
                 android:textColor="@color/black"
-                android:textSize="13sp" />
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
 
-            <EditText
-                android:id="@+id/editAge"
+            <LinearLayout
+                android:id="@+id/weightTrendCard"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="3dp"
-                android:layout_marginBottom="10dp"
-                android:background="@drawable/edittext_bg"
-                android:hint="e.g. 8 months"
-                android:inputType="text"
+                android:layout_height="78dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/weight_trend_bg"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                android:clickable="true"
+                android:focusable="true">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Weight"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/editWeight"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="3dp"
-                android:layout_marginBottom="10dp"
-                android:background="@drawable/edittext_bg"
-                android:hint="e.g. 1.8 kg"
-                android:inputType="numberDecimal"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="5dp"
+                        android:background="@drawable/weight_bar_normal" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Last Fed"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="5dp"
+                        android:background="@drawable/weight_bar_normal" />
 
-            <EditText
-                android:id="@+id/editLastFed"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="3dp"
-                android:layout_marginBottom="10dp"
-                android:background="@drawable/edittext_bg"
-                android:focusable="false"
-                android:hint="Tap to select date/time"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="5dp"
+                        android:background="@drawable/weight_bar_normal" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Last Drink"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="23dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/weight_bar_down" />
 
-            <EditText
-                android:id="@+id/editLastDrink"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="3dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/edittext_bg"
-                android:focusable="false"
-                android:hint="Tap to select date/time"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/black"
-                android:textSize="13sp" />
+                </LinearLayout>
 
-            <!-- Gemini AI summary card -->
+                <TextView
+                    android:id="@+id/txtWeightTrend"
+                    android:layout_width="70dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="Tap to set"
+                    android:textColor="@color/black"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/edittext_bg"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="LAST FED"
+                        android:textColor="@color/black"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08" />
+
+                    <EditText
+                        android:id="@+id/editLastFed"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/rabbit_input_bg"
+                        android:focusable="false"
+                        android:clickable="true"
+                        android:hint="7:30 AM"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="8dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="#77705F"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <Space
+                    android:layout_width="10dp"
+                    android:layout_height="1dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="LAST WATER"
+                        android:textColor="@color/black"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08" />
+
+                    <EditText
+                        android:id="@+id/editLastDrink"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/rabbit_input_bg"
+                        android:focusable="false"
+                        android:clickable="true"
+                        android:hint="6 hrs ago"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="8dp"
+                        android:textColor="@color/black"
+                        android:textColorHint="#77705F"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/aiHealthCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="17dp"
+                android:background="@drawable/ai_summary_bg"
                 android:orientation="vertical"
                 android:padding="14dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
-                    android:text="AI Health Summary"
-                    android:textColor="@color/black"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="13dp"
+                        android:layout_height="13dp"
+                        android:layout_marginEnd="9dp"
+                        android:background="@drawable/ai_dot" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AI Health Summary"
+                        android:textColor="@color/black"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/txtAiSummary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:text="Fill in your rabbit's details, then tap Generate Summary for personalized care recommendations."
-                    android:textColor="@color/black"
-                    android:textSize="13sp" />
+                    android:layout_marginTop="10dp"
+                    android:text="Generate a summary to get personalized care recommendations."
+                    android:textColor="#716A5A"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="3dp" />
 
                 <ProgressBar
                     android:id="@+id/progressAiSummary"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:layout_marginBottom="10dp"
+                    android:layout_marginTop="8dp"
                     android:visibility="gone" />
 
-                <Button
-                    android:id="@+id/btnGenerateSummary"
-                    style="@style/Widget.AppCompat.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:background="@drawable/button_login_bg"
-                    android:backgroundTint="@null"
-                    app:backgroundTint="@null"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:stateListAnimator="@null"
-                    android:text="Generate Summary"
-                    android:textAllCaps="false"
-                    android:textColor="@color/black" />
-
             </LinearLayout>
+
+            <Button
+                android:id="@+id/btnGenerateSummary"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/ai_button_bg"
+                android:backgroundTint="@null"
+                app:backgroundTint="@null"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:stateListAnimator="@null"
+                android:text="Generate AI Summary"
+                android:textAllCaps="false"
+                android:textColor="@color/black"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnSaveRabbit"
                 style="@style/Widget.AppCompat.Button"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/button_register_bg"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/save_rabbit_bg"
                 android:backgroundTint="@null"
                 app:backgroundTint="@null"
                 android:insetTop="0dp"
@@ -256,7 +375,7 @@
                 android:text="Save Rabbit"
                 android:textAllCaps="false"
                 android:textColor="@color/black"
-                android:textSize="16sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
 
         </LinearLayout>

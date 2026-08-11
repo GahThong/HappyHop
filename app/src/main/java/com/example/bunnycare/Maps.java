@@ -20,7 +20,10 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 
 import org.osmdroid.config.Configuration;
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
+import org.osmdroid.tileprovider.tilesource.TileSourcePolicy;
+import org.osmdroid.tileprovider.tilesource.XYTileSource;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.FolderOverlay;
@@ -37,6 +40,15 @@ public class Maps extends Fragment {
     private FusedLocationProviderClient fusedLocationClient;
 
     private final int REQUEST_PERMISSIONS_REQUEST_CODE = 1;
+    public static final OnlineTileSourceBase MYMAPNIK = new XYTileSource("Mapnik",
+            0, 19, 256, ".png", new String[]{
+            "https://tile.openstreetmap.org/"}, "© OpenStreetMap contributors",
+            new TileSourcePolicy(1,
+                    TileSourcePolicy.FLAG_NO_BULK
+                            | TileSourcePolicy.FLAG_NO_PREVENTIVE
+                            | TileSourcePolicy.FLAG_USER_AGENT_MEANINGFUL
+                            | TileSourcePolicy.FLAG_USER_AGENT_NORMALIZED
+            ));
 
     private Marker userMarker;
 
@@ -95,7 +107,7 @@ public class Maps extends Fragment {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(getActivity());
 
         mapView = view.findViewById(R.id.mapView);
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
+        mapView.setTileSource(TileSourceFactory.OpenTopo);
         mapView.setMultiTouchControls(true);
         mapView.setBuiltInZoomControls(true);
 
