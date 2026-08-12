@@ -3,23 +3,44 @@ package com.example.bunnycare;
 public class Rabbit {
 
     private String id;
-    private String ownerId;
     private String rabbitName;
     private String breed;
-    private String age;          // display string, e.g. "1.5 yrs" or "8 months"
-    private String imageUrl;
-    private String lastFedFood;
+    private String age;
+    private String weight;
+    private String lastFed;
     private String lastDrink;
-    private String qrImage;
+    private String imageUrl;
+    private String ownerId;
+    private String aiSummary;
     private boolean hasQr;
 
-    // Drives the status dot color in the list: true = green (healthy/ok),
-    // false = red (needs attention). Defaults to true so newly added
-    // rabbits show green until flagged otherwise.
-    private boolean healthy = true;
-
     public Rabbit() {
-        // Required empty constructor for Firestore
+    }
+
+    public Rabbit(
+            String id,
+            String rabbitName,
+            String breed,
+            String age,
+            String weight,
+            String lastFed,
+            String lastDrink,
+            String imageUrl,
+            String ownerId,
+            String aiSummary,
+            boolean hasQr
+    ) {
+        this.id = id;
+        this.rabbitName = rabbitName;
+        this.breed = breed;
+        this.age = age;
+        this.weight = weight;
+        this.lastFed = lastFed;
+        this.lastDrink = lastDrink;
+        this.imageUrl = imageUrl;
+        this.ownerId = ownerId;
+        this.aiSummary = aiSummary;
+        this.hasQr = hasQr;
     }
 
     public String getId() {
@@ -28,14 +49,6 @@ public class Rabbit {
 
     public void setId(String id) {
         this.id = id;
-    }
-
-    public String getOwnerId() {
-        return ownerId;
-    }
-
-    public void setOwnerId(String ownerId) {
-        this.ownerId = ownerId;
     }
 
     public String getRabbitName() {
@@ -62,20 +75,20 @@ public class Rabbit {
         this.age = age;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
+    public String getWeight() {
+        return weight;
     }
 
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
+    public void setWeight(String weight) {
+        this.weight = weight;
     }
 
-    public String getLastFedFood() {
-        return lastFedFood;
+    public String getLastFed() {
+        return lastFed;
     }
 
-    public void setLastFedFood(String lastFedFood) {
-        this.lastFedFood = lastFedFood;
+    public void setLastFed(String lastFed) {
+        this.lastFed = lastFed;
     }
 
     public String getLastDrink() {
@@ -86,12 +99,28 @@ public class Rabbit {
         this.lastDrink = lastDrink;
     }
 
-    public String getQrImage() {
-        return qrImage;
+    public String getImageUrl() {
+        return imageUrl;
     }
 
-    public void setQrImage(String qrImage) {
-        this.qrImage = qrImage;
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
+    public String getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public String getAiSummary() {
+        return aiSummary;
+    }
+
+    public void setAiSummary(String aiSummary) {
+        this.aiSummary = aiSummary;
     }
 
     public boolean isHasQr() {
@@ -103,26 +132,21 @@ public class Rabbit {
     }
 
     public boolean isHealthy() {
-        return healthy;
+        return true;
     }
 
-    public void setHealthy(boolean healthy) {
-        this.healthy = healthy;
-    }
-
-    // Convenience for the list card: "Holland Lop · 1.5 yrs"
     public String getBreedAgeLabel() {
-        boolean hasBreed = breed != null && !breed.isEmpty();
-        boolean hasAge = age != null && !age.isEmpty();
 
-        if (hasBreed && hasAge) {
-            return breed + " · " + age;
-        } else if (hasBreed) {
-            return breed;
-        } else if (hasAge) {
-            return age;
-        } else {
-            return "";
-        }
+        String breedText =
+                breed == null || breed.trim().isEmpty()
+                        ? "Unknown breed"
+                        : breed;
+
+        String ageText =
+                age == null || age.trim().isEmpty()
+                        ? ""
+                        : " • " + age;
+
+        return breedText + ageText;
     }
 }

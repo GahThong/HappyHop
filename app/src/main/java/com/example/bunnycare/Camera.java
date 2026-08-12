@@ -2,9 +2,15 @@ package com.example.bunnycare;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.media.ThumbnailUtils;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -13,6 +19,9 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -22,6 +31,9 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.bitmap.CenterCrop;
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -31,6 +43,9 @@ import com.google.firebase.ai.java.GenerativeModelFutures;
 import com.google.firebase.ai.type.Content;
 import com.google.firebase.ai.type.GenerateContentResponse;
 import com.google.firebase.ai.type.GenerativeBackend;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -65,7 +80,6 @@ public class Camera extends Fragment {
             "Pasteurellosis"
     };
 
-    // Rabbit features we ask the user to pick a photo of, for the higher-accuracy Gemini pass.
     String[] featureNames = {
             "Legs",
             "Arms",
@@ -81,10 +95,19 @@ public class Camera extends Fragment {
 
     Executor geminiExecutor = Executors.newSingleThreadExecutor();
 
-    // State for the original capture + the opt-in multi-feature Gemini refinement.
     Bitmap lastOriginalImage;
     List<Bitmap> featureImages = new ArrayList<>();
     int currentFeatureIndex = 0;
+
+    private View statusBadge;
+    private View statusDot;
+    private TextView txtStatus;
+
+    private LinearLayout yourRabbitsRow;
+    private FirebaseFirestore db;
+
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -94,8 +117,14 @@ public class Camera extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
 
-        Button btnBreed = view.findViewById(R.id.btnBreed);
-        Button btnDisease = view.findViewById(R.id.btnDisease);
+        Button btnOpenCamera = view.findViewById(R.id.btnOpenCamera);
+
+        statusBadge = view.findViewById(R.id.statusBadge);
+        statusDot = view.findViewById(R.id.statusDot);
+        txtStatus = view.findViewById(R.id.txtStatus);
+
+        yourRabbitsRow = view.findViewById(R.id.yourRabbitsRow);
+        db = FirebaseFirestore.getInstance();
 
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
@@ -108,8 +137,6 @@ public class Camera extends Fragment {
                 }
         );
 
-        // Main capture -> runs the local TFLite classifier and shows the result,
-        // then offers the opt-in "want better result with %?" Gemini refinement.
         takePictureLauncher = registerForActivityResult(
                 new ActivityResultContracts.TakePicturePreview(),
                 image -> {
@@ -122,9 +149,6 @@ public class Camera extends Fragment {
                 }
         );
 
-        // Follow-up picks for individual rabbit features (legs, arms, ears, nose, fur, tail),
-        // used only when the user opts into the Gemini refinement. Picked from the gallery
-        // rather than captured live, so no camera permission is needed for this step.
         featurePickerLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
@@ -143,15 +167,247 @@ public class Camera extends Fragment {
                 }
         );
 
-        btnBreed.setOnClickListener(v -> {
-            currentMode = "BREED";
-            openCamera();
+        btnOpenCamera.setOnClickListener(v -> showScanTypeDialog());
+
+        setupConnectivityMonitoring();
+
+        loadUserRabbits();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        if (db != null && yourRabbitsRow != null) {
+            loadUserRabbits();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Your rabbits row (same data source as Monitoring fragment)
+    // ---------------------------------------------------------------
+    private void loadUserRabbits() {
+
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+            yourRabbitsRow.removeAllViews();
+            return;
+        }
+
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+        db.collection("rabbits")
+                .whereEqualTo("ownerId", uid)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+
+                    if (yourRabbitsRow == null || !isAdded()) {
+                        return;
+                    }
+
+                    yourRabbitsRow.removeAllViews();
+
+                    for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
+
+                        Rabbit rabbit = document.toObject(Rabbit.class);
+
+                        if (rabbit != null) {
+                            rabbit.setId(document.getId());
+                            yourRabbitsRow.addView(buildRabbitItemView(rabbit));
+                        }
+                    }
+                })
+                .addOnFailureListener(e ->
+                        Log.e("Camera", "Failed to load rabbits", e)
+                );
+    }
+
+    private View buildRabbitItemView(Rabbit rabbit) {
+
+        LinearLayout item = new LinearLayout(requireContext());
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+
+        LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        itemParams.setMarginEnd(dpToPx(14));
+        item.setLayoutParams(itemParams);
+
+        ImageView thumb = new ImageView(requireContext());
+        LinearLayout.LayoutParams thumbParams = new LinearLayout.LayoutParams(dpToPx(78), dpToPx(78));
+        thumb.setLayoutParams(thumbParams);
+        thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+
+        String imageUrl = rabbit.getImageUrl();
+
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+
+            Glide.with(this)
+                    .load(imageUrl)
+                    .transform(new CenterCrop(), new RoundedCorners(dpToPx(16)))
+                    .placeholder(R.drawable.rabbit_thumb_bg)
+                    .error(R.drawable.rabbit_thumb_bg)
+                    .into(thumb);
+
+        } else {
+
+            thumb.setImageDrawable(null);
+            thumb.setBackgroundResource(R.drawable.rabbit_thumb_bg);
+        }
+
+        TextView name = new TextView(requireContext());
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        nameParams.topMargin = dpToPx(6);
+        name.setLayoutParams(nameParams);
+
+        String rabbitName = rabbit.getRabbitName();
+        name.setText(rabbitName == null || rabbitName.trim().isEmpty() ? "Rabbit" : rabbitName);
+        name.setTextSize(12f);
+        name.setTextColor(0xFF3A3226);
+        name.setTypeface(name.getTypeface(), android.graphics.Typeface.BOLD);
+
+        item.addView(thumb);
+        item.addView(name);
+
+        item.setOnClickListener(v -> {
+
+            Intent intent = new Intent(requireActivity(), AddRabbitActivity.class);
+            intent.putExtra("editMode", true);
+            intent.putExtra("rabbitId", rabbit.getId());
+            startActivity(intent);
         });
 
-        btnDisease.setOnClickListener(v -> {
-            currentMode = "DISEASE";
-            openCamera();
-        });
+        return item;
+    }
+
+    private int dpToPx(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density);
+    }
+
+    // ---------------------------------------------------------------
+    // Online / Offline status badge
+    // ---------------------------------------------------------------
+    private void setupConnectivityMonitoring() {
+
+        connectivityManager = (ConnectivityManager)
+                requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        if (connectivityManager == null) {
+            updateStatusBadge(false);
+            return;
+        }
+
+        updateStatusBadge(isCurrentlyOnline());
+
+        NetworkRequest request = new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+
+            @Override
+            public void onAvailable(@NonNull Network network) {
+                if (isAdded()) {
+                    requireActivity().runOnUiThread(() -> updateStatusBadge(true));
+                }
+            }
+
+            @Override
+            public void onLost(@NonNull Network network) {
+                if (isAdded()) {
+                    requireActivity().runOnUiThread(() -> updateStatusBadge(isCurrentlyOnline()));
+                }
+            }
+
+            @Override
+            public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities capabilities) {
+                if (isAdded()) {
+                    boolean online = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+                    requireActivity().runOnUiThread(() -> updateStatusBadge(online));
+                }
+            }
+        };
+
+        connectivityManager.registerNetworkCallback(request, networkCallback);
+    }
+
+    private boolean isCurrentlyOnline() {
+
+        if (connectivityManager == null) {
+            return false;
+        }
+
+        Network network = connectivityManager.getActiveNetwork();
+
+        if (network == null) {
+            return false;
+        }
+
+        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+
+        return capabilities != null
+                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+    }
+
+    private void updateStatusBadge(boolean online) {
+
+        if (statusBadge == null || statusDot == null || txtStatus == null) {
+            return;
+        }
+
+        if (online) {
+
+            statusBadge.setBackgroundResource(R.drawable.status_pill_online);
+            statusDot.setBackgroundResource(R.drawable.status_dot_online);
+            txtStatus.setText("Online \u00B7 Gemini AI");
+            txtStatus.setTextColor(0xFF1F6B37);
+
+        } else {
+
+            statusBadge.setBackgroundResource(R.drawable.status_pill_offline);
+            statusDot.setBackgroundResource(R.drawable.status_dot_offline);
+            txtStatus.setText("Offline");
+            txtStatus.setTextColor(0xFF5C5748);
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+
+        if (connectivityManager != null && networkCallback != null) {
+            connectivityManager.unregisterNetworkCallback(networkCallback);
+        }
+
+        networkCallback = null;
+        statusBadge = null;
+        statusDot = null;
+        txtStatus = null;
+        yourRabbitsRow = null;
+    }
+
+    // ---------------------------------------------------------------
+    // Open Camera -> choose Breed or Disease
+    // ---------------------------------------------------------------
+    private void showScanTypeDialog() {
+
+        String[] options = {"Breed", "Disease"};
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("What do you want to scan?")
+                .setItems(options, (dialog, which) -> {
+
+                    currentMode = which == 0 ? "BREED" : "DISEASE";
+
+                    openCamera();
+                })
+                .show();
     }
 
     private void openCamera() {
@@ -163,7 +419,6 @@ public class Camera extends Fragment {
         }
     }
 
-    // Converts a picked gallery Uri into a Bitmap.
     private Bitmap loadBitmapFromUri(Uri uri) {
         try {
             return MediaStore.Images.Media.getBitmap(requireContext().getContentResolver(), uri);
@@ -230,7 +485,6 @@ public class Camera extends Fragment {
         }
     }
 
-    // Shows the TFLite result, with a neutral button offering the Gemini refinement.
     private void showResultDialog(String title, String label, String info) {
         new AlertDialog.Builder(requireContext())
                 .setTitle(title)
@@ -380,7 +634,6 @@ public class Camera extends Fragment {
         });
     }
 
-    // Gemini sometimes wraps JSON in markdown fences; strip those if present.
     private String extractJson(String text) {
         if (text == null) return "{}";
         String trimmed = text.trim();
