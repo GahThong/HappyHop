@@ -1,72 +1,86 @@
 package com.example.bunnycare;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.cloudinary.android.MediaManager;
 import com.cloudinary.android.callback.ErrorInfo;
 import com.cloudinary.android.callback.UploadCallback;
-import com.google.firebase.auth.AuthCredential;
-import com.google.firebase.auth.EmailAuthProvider;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.SetOptions;
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * Profile screen: avatar, name, email, "Edit Profile", the "My Rabbits" list,
+ * and the Account card (Notifications / Privacy / Log Out).
+ *
+ * Assumed Firestore shape (adjust field names to match your project if different):
+ *   users/{uid}          -> username, email, imageUrl
+ *   rabbits               -> ownerId, name, breed, imageUrl
+ *   notifications         -> recipientId, message, read, timestamp
+ */
 public class Account extends Fragment {
 
-    EditText txtUsername, txtEmail, txtBreed;
-    TextView txtRole;
-    ImageView menuIcon, profileImage;
+    ImageView profileImage;
+    TextView profileName, profileEmail, notificationBadge;
+    View btnEditProfile, rowNotifications, rowPrivacy, rowLogout;
+    RecyclerView rabbitsRecyclerView;
 
     FirebaseAuth mAuth;
     FirebaseFirestore db;
     FirebaseUser user;
 
+    List<Rabbit> rabbitList;
+    RabbitAdapter rabbitsAdapter;
+
+    ListenerRegistration notificationsListener;
+
     Uri imageUri;
-    Button btnSave, btnDiscard;
-    String imageUrl = "";
     ActivityResultLauncher<Intent> imagePickerLauncher;
 
+    @Nullable
     @Override
-    public android.view.View onCreateView(android.view.LayoutInflater inflater, ViewGroup container,
-                                          android.os.Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
 
-        android.view.View view = inflater.inflate(R.layout.fragment_account, container, false);
+        View view = inflater.inflate(R.layout.fragment_account, container, false);
 
-        txtUsername = view.findViewById(R.id.accountUsername);
-        txtEmail = view.findViewById(R.id.accountEmail);
-        txtBreed = view.findViewById(R.id.accountBreed);
-        txtRole = view.findViewById(R.id.accountRole);
         profileImage = view.findViewById(R.id.profileImage);
-        menuIcon = view.findViewById(R.id.menuIcon);
-        btnSave = view.findViewById(R.id.btnSave);
-        btnDiscard = view.findViewById(R.id.btnDiscard);
-        txtRole.setText("Rabbit Owner");
-
-        txtEmail.setEnabled(false);
-        txtEmail.setFocusable(false);
-        txtEmail.setClickable(false);
+        profileName = view.findViewById(R.id.profileName);
+        profileEmail = view.findViewById(R.id.profileEmail);
+        btnEditProfile = view.findViewById(R.id.btnEditProfile);
+        rabbitsRecyclerView = view.findViewById(R.id.rabbitsRecyclerView);
+        rowNotifications = view.findViewById(R.id.rowNotifications);
+        notificationBadge = view.findViewById(R.id.notificationBadge);
+        rowPrivacy = view.findViewById(R.id.rowPrivacy);
+        rowLogout = view.findViewById(R.id.rowLogout);
 
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
@@ -77,7 +91,7 @@ public class Account extends Fragment {
         imagePickerLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                    if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
 
                         imageUri = result.getData().getData();
 
@@ -85,42 +99,65 @@ public class Account extends Fragment {
                                 .load(imageUri)
                                 .circleCrop()
                                 .into(profileImage);
+
+                        uploadProfileImage();
                     }
                 });
 
         profileImage.setOnClickListener(v -> openGallery());
 
-        menuIcon.setOnClickListener(this::showMenu);
+        rabbitList = new ArrayList<>();
+        rabbitsAdapter = new RabbitAdapter(getContext(), rabbitList, new RabbitAdapter.OnRabbitItemListener() {
 
-        txtUsername.setOnFocusChangeListener((v, hasFocus) -> {
+            @Override
+            public void onRabbitTap(Rabbit rabbit, View anchorView) {
 
-            if (!hasFocus) {
+                Intent intent = new Intent(getActivity(), AddRabbitActivity.class);
 
-                String newUsername = txtUsername.getText().toString().trim();
+                intent.putExtra("editMode", true);
+                intent.putExtra("rabbitId", rabbit.getId());
 
-                Map<String, Object> map = new HashMap<>();
-                map.put("username", newUsername);
+                startActivity(intent);
+            }
 
-                db.collection("users")
-                        .document(user.getUid())
-                        .update(map)
-                        .addOnSuccessListener(unused ->
-                                Toast.makeText(getContext(),
-                                        "Username Updated",
-                                        Toast.LENGTH_SHORT).show());
+            @Override
+            public void onRabbitLongPress(Rabbit rabbit) {
+                // No long-press action on the profile screen for now
             }
         });
 
-        btnSave.setOnClickListener(v -> uploadToCloudinary());
+        rabbitsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        rabbitsRecyclerView.setAdapter(rabbitsAdapter);
+
         loadUser();
+        loadRabbits();
+        listenForNotificationCount();
+
+        btnEditProfile.setOnClickListener(v -> openEditProfile());
+
+        rowNotifications.setOnClickListener(v -> showNotifications());
+
+        rowPrivacy.setOnClickListener(v -> showPrivacy());
+
+        rowLogout.setOnClickListener(v -> logOut());
 
         return view;
     }
-    private void uploadToCloudinary() {
 
-        if (imageUri == null) {
-            saveProfile();
-            return;
+    private void openGallery() {
+
+        Intent intent = new Intent(Intent.ACTION_PICK);
+        intent.setType("image/*");
+
+        imagePickerLauncher.launch(intent);
+    }
+
+    private void uploadProfileImage() {
+
+        if (imageUri == null) return;
+
+        if (isAdded()) {
+            Toast.makeText(getContext(), "Uploading photo...", Toast.LENGTH_SHORT).show();
         }
 
         MediaManager.get()
@@ -134,35 +171,35 @@ public class Account extends Fragment {
                     @Override
                     public void onSuccess(String requestId, Map resultData) {
 
-                        imageUrl = (String) resultData.get("secure_url");
-                        saveProfile();
+                        String secureUrl = (String) resultData.get("secure_url");
+
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("imageUrl", secureUrl);
+
+                        db.collection("users")
+                                .document(user.getUid())
+                                .update(map)
+                                .addOnSuccessListener(unused -> {
+
+                                    if (!isAdded() || getContext() == null) return;
+
+                                    Toast.makeText(getContext(), "Profile photo updated", Toast.LENGTH_SHORT).show();
+                                });
                     }
 
-                    @Override public void onError(String requestId, ErrorInfo error) {}
+                    @Override
+                    public void onError(String requestId, ErrorInfo error) {
+
+                        if (!isAdded() || getContext() == null) return;
+
+                        Toast.makeText(getContext(), "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
+                    }
+
                     @Override public void onReschedule(String requestId, ErrorInfo error) {}
 
                 }).dispatch();
     }
 
-    private void saveProfile() {
-
-        Map<String, Object> map = new HashMap<>();
-        map.put("username", txtUsername.getText().toString().trim());
-        map.put("email", txtEmail.getText().toString().trim());
-        map.put("breed", txtBreed.getText().toString().trim());
-        map.put("role", "Rabbit Owner");
-        map.put("imageUrl", imageUrl);
-
-        db.collection("users")
-                .document(user.getUid())
-                .set(map, SetOptions.merge())
-                .addOnSuccessListener(a ->
-                        Toast.makeText(getContext(), "Saved", Toast.LENGTH_SHORT).show()
-                )
-                .addOnFailureListener(e ->
-                        Toast.makeText(getContext(), e.getMessage(), Toast.LENGTH_LONG).show()
-                );
-    }
     private void loadUser() {
 
         db.collection("users")
@@ -170,14 +207,14 @@ public class Account extends Fragment {
                 .get()
                 .addOnSuccessListener(doc -> {
 
-                    txtUsername.setText(doc.getString("username"));
-                    txtEmail.setText(doc.getString("email"));
-                    txtBreed.setText(doc.getString("breed"));
+                    if (!doc.exists()) return;
+
+                    profileName.setText(doc.getString("username"));
+                    profileEmail.setText(doc.getString("email"));
 
                     String imageUrl = doc.getString("imageUrl");
 
                     if (imageUrl != null && !imageUrl.isEmpty()) {
-
                         Glide.with(requireContext())
                                 .load(imageUrl)
                                 .circleCrop()
@@ -186,236 +223,166 @@ public class Account extends Fragment {
                 });
     }
 
-    private void openGallery() {
+    private void loadRabbits() {
 
-        Intent intent = new Intent(Intent.ACTION_PICK);
-        intent.setType("image/*");
+        db.collection("rabbits")
+                .whereEqualTo("ownerId", user.getUid())
+                .addSnapshotListener((value, error) -> {
 
-        imagePickerLauncher.launch(intent);
+                    if (error != null || value == null) return;
+
+                    rabbitList.clear();
+
+                    for (DocumentSnapshot doc : value.getDocuments()) {
+
+                        Rabbit rabbit = doc.toObject(Rabbit.class);
+
+                        if (rabbit != null) {
+                            rabbit.setId(doc.getId());
+                            rabbitList.add(rabbit);
+                        }
+                    }
+
+                    rabbitsAdapter.notifyDataSetChanged();
+                });
     }
 
-    private void showMenu(android.view.View view) {
+    /**
+     * Same pattern Community.java uses for its post feed: a live Firestore
+     * listener ordered by timestamp, just scoped to this user's notifications.
+     */
+    private void listenForNotificationCount() {
 
-        PopupMenu popup = new PopupMenu(requireContext(), view);
+        notificationsListener = db.collection("notifications")
+                .whereEqualTo("recipientId", user.getUid())
+                .whereEqualTo("read", false)
+                .addSnapshotListener((value, error) -> {
 
-        popup.inflate(R.menu.menu_account);
+                    if (error != null || value == null || getContext() == null) return;
 
-        popup.setOnMenuItemClickListener(item -> {
+                    int unread = value.size();
 
-            int id = item.getItemId();
-
-            if (id == R.id.menu_account_setting) {
-                showAccountSettings();
-            }
-
-
-            if (id == R.id.menu_logout) {
-
-                mAuth.signOut();
-
-                startActivity(new Intent(getActivity(), Login.class));
-
-                requireActivity().finish();
-            }
-
-            return true;
-        });
-
-        popup.show();
+                    if (unread > 0) {
+                        notificationBadge.setVisibility(View.VISIBLE);
+                        notificationBadge.setText(String.valueOf(unread));
+                    } else {
+                        notificationBadge.setVisibility(View.GONE);
+                    }
+                });
     }
 
-    private void showAccountSettings() {
+    private void showNotifications() {
 
-        String[] options = {"Change Email", "Change Password"};
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+
+        View sheet = LayoutInflater.from(getContext())
+                .inflate(R.layout.fragment_notification, null);
+
+        dialog.setContentView(sheet);
+        dialog.show();
+
+        RecyclerView notificationsRecyclerView =
+                sheet.findViewById(R.id.notificationsRecyclerView);
+
+        View emptyNotifications = sheet.findViewById(R.id.emptyNotifications);
+
+        List<AppNotification> notificationList = new ArrayList<>();
+        NotificationAdapter adapter = new NotificationAdapter(getContext(), notificationList);
+
+        notificationsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        notificationsRecyclerView.setAdapter(adapter);
+
+        db.collection("notifications")
+                .whereEqualTo("recipientId", user.getUid())
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener((value, error) -> {
+
+                    if (error != null || value == null) return;
+
+                    notificationList.clear();
+
+                    for (DocumentSnapshot doc : value.getDocuments()) {
+
+                        AppNotification notification = doc.toObject(AppNotification.class);
+
+                        if (notification != null) {
+                            notification.setId(doc.getId());
+                            notificationList.add(notification);
+
+                            // Mark as read once it's been shown
+                            if (!notification.isRead()) {
+                                doc.getReference().update("read", true);
+                            }
+                        }
+                    }
+
+                    adapter.notifyDataSetChanged();
+
+                    emptyNotifications.setVisibility(
+                            notificationList.isEmpty() ? View.VISIBLE : View.GONE);
+                });
+    }
+
+    private void showPrivacy() {
 
         new AlertDialog.Builder(getContext())
-                .setTitle("Account Settings")
-                .setItems(options, (d, i) -> {
-
-                    if (i == 0) {
-                        changeEmail();
-                    }
-
-                    if (i == 1) {
-                        changePassword();
-                    }
-                })
+                .setTitle("Privacy")
+                // TODO: replace with real privacy settings (data sharing, visibility, etc.)
+                .setMessage("Privacy settings go here.")
+                .setPositiveButton("Close", null)
                 .show();
     }
 
-    private void changeEmail() {
+    private void openEditProfile() {
 
-        EditText e = new EditText(getContext());
+        EditText input = new EditText(getContext());
+
+        input.setHint("Username");
+        input.setText(profileName.getText().toString());
 
         new AlertDialog.Builder(getContext())
-                .setTitle("Change Email")
-                .setView(e)
-                .setPositiveButton("Send", (d, w) -> {
+                .setTitle("Edit Profile")
+                .setView(input)
+                .setPositiveButton("Save", (dialog, which) -> {
 
-                    String email = e.getText().toString().trim();
+                    String newUsername = input.getText().toString().trim();
 
-                    user.verifyBeforeUpdateEmail(email)
-                            .addOnSuccessListener(a -> {
+                    if (newUsername.isEmpty()) return;
 
-                                db.collection("users")
-                                        .document(user.getUid())
-                                        .update("email", email);
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("username", newUsername);
 
-                                Toast.makeText(getContext(),
-                                        "Verification Sent",
-                                        Toast.LENGTH_SHORT).show();
+                    db.collection("users")
+                            .document(user.getUid())
+                            .update(map)
+                            .addOnSuccessListener(unused -> {
+
+                                profileName.setText(newUsername);
+
+                                android.widget.Toast.makeText(getContext(),
+                                        "Username Updated",
+                                        android.widget.Toast.LENGTH_SHORT).show();
                             });
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
-    private void changePassword() {
+    private void logOut() {
 
-        EditText oldP = new EditText(getContext());
-        EditText newP = new EditText(getContext());
-        EditText reP = new EditText(getContext());
+        mAuth.signOut();
 
-        oldP.setHint("Current Password");
-        newP.setHint("New Password");
-        reP.setHint("Confirm Password");
+        startActivity(new Intent(getActivity(), Login.class));
 
-        LinearLayout layout = new LinearLayout(getContext());
-
-        layout.setOrientation(LinearLayout.VERTICAL);
-
-        layout.addView(oldP);
-        layout.addView(newP);
-        layout.addView(reP);
-
-        new AlertDialog.Builder(getContext())
-                .setTitle("Change Password")
-                .setView(layout)
-                .setPositiveButton("Update", (d, w) -> {
-
-                    String oldPass = oldP.getText().toString().trim();
-                    String newPass = newP.getText().toString().trim();
-                    String rePass = reP.getText().toString().trim();
-
-                    if (!newPass.equals(rePass)) {
-
-                        Toast.makeText(getContext(),
-                                "Passwords do not match",
-                                Toast.LENGTH_SHORT).show();
-
-                        return;
-                    }
-
-                    AuthCredential credential =
-                            EmailAuthProvider.getCredential(user.getEmail(), oldPass);
-
-                    user.reauthenticate(credential)
-                            .addOnSuccessListener(a ->
-                                    user.updatePassword(newPass)
-                                            .addOnSuccessListener(unused ->
-                                                    Toast.makeText(getContext(),
-                                                            "Password Updated",
-                                                            Toast.LENGTH_SHORT).show()
-                                            )
-                            );
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    private void showFloatingImage(String imageUrl) {
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-
-        LinearLayout layout = new LinearLayout(requireContext());
-
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 40, 40, 40);
-
-        TextView title = new TextView(requireContext());
-
-        title.setText("Medical Record");
-        title.setTextSize(22);
-        title.setGravity(android.view.Gravity.CENTER);
-        title.setPadding(0, 0, 0, 30);
-
-        ImageView imageView = new ImageView(requireContext());
-
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        800
-                );
-
-        imageView.setLayoutParams(params);
-        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-
-        Glide.with(requireContext())
-                .load(imageUrl)
-                .into(imageView);
-
-        layout.addView(title);
-        layout.addView(imageView);
-
-        builder.setView(layout)
-                .setPositiveButton("Close", null);
-
-        builder.create().show();
+        requireActivity().finish();
     }
 
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    public void onDestroyView() {
+        super.onDestroyView();
 
-        IntentResult result =
-                IntentIntegrator.parseActivityResult(
-                        requestCode,
-                        resultCode,
-                        data
-                );
-
-        if (result != null && result.getContents() != null) {
-
-            String uid = result.getContents();
-
-            db.collection("users")
-                    .document(uid)
-                    .get()
-                    .addOnSuccessListener(doc -> {
-
-                        String image = doc.getString("qrImage");
-
-                        if (image == null || image.isEmpty()) {
-
-                            Toast.makeText(getContext(),
-                                    "No image found",
-                                    Toast.LENGTH_SHORT).show();
-
-                            return;
-                        }
-
-                        showFloatingImage(image);
-                    });
-
-            return;
+        if (notificationsListener != null) {
+            notificationsListener.remove();
         }
-
-        if (requestCode == 2001 && data != null) {
-
-            Uri uri = data.getData();
-
-            if (uri != null) {
-
-                db.collection("users")
-                        .document(user.getUid())
-                        .update("qrImage", uri.toString())
-                        .addOnSuccessListener(a ->
-                                Toast.makeText(getContext(),
-                                        "QR Image Updated",
-                                        Toast.LENGTH_SHORT).show()
-                        );
-            }
-        }
-
-        super.onActivityResult(requestCode, resultCode, data);
     }
 }

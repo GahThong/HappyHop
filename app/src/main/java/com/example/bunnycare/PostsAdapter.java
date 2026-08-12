@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -62,6 +63,14 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
         holder.likeCount.setText(String.valueOf(post.getLikesCount()));
         holder.commentCount.setText(String.valueOf(post.getCommentCount()));
 
+        Timestamp timestamp = post.getTimestamp();
+
+        holder.timestampTextView.setText(
+                timestamp != null
+                        ? getRelativeTime(timestamp.toDate().getTime())
+                        : "Just now"
+        );
+
         if (post.getPostImage() != null && !post.getPostImage().isEmpty()) {
             holder.postImage.setVisibility(View.VISIBLE);
             Glide.with(context).load(post.getPostImage()).into(holder.postImage);
@@ -87,6 +96,14 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
                         holder.likeCount.setText(String.valueOf(likes != null ? likes : 0));
                         holder.commentCount.setText(String.valueOf(comments != null ? comments : 0));
+
+                        Timestamp updatedTimestamp = value.getTimestamp("timestamp");
+
+                        if (updatedTimestamp != null) {
+                            holder.timestampTextView.setText(
+                                    getRelativeTime(updatedTimestamp.toDate().getTime())
+                            );
+                        }
                     }
                 });
 
@@ -517,6 +534,41 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                 .show();
     }
 
+    /**
+     * Turns a millisecond timestamp into "Just now", "5 minutes ago",
+     * "1 day ago", "1 week ago", "2 months ago", "1 year ago", etc.
+     */
+    private static String getRelativeTime(long timeMillis) {
+
+        long diff = System.currentTimeMillis() - timeMillis;
+
+        if (diff < 0) diff = 0;
+
+        long seconds = diff / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+        long days = hours / 24;
+        long weeks = days / 7;
+        long months = days / 30;
+        long years = days / 365;
+
+        if (seconds < 60) {
+            return "Just now";
+        } else if (minutes < 60) {
+            return minutes + (minutes == 1 ? " minute ago" : " minutes ago");
+        } else if (hours < 24) {
+            return hours + (hours == 1 ? " hour ago" : " hours ago");
+        } else if (days < 7) {
+            return days + (days == 1 ? " day ago" : " days ago");
+        } else if (weeks < 5) {
+            return weeks + (weeks == 1 ? " week ago" : " weeks ago");
+        } else if (months < 12) {
+            return months + (months == 1 ? " month ago" : " months ago");
+        } else {
+            return years + (years == 1 ? " year ago" : " years ago");
+        }
+    }
+
     @Override
     public int getItemCount() {
         return list.size();
@@ -527,7 +579,8 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
         TextView userName,
                 description,
                 likeCount,
-                commentCount;
+                commentCount,
+                timestampTextView;
 
         ImageView postImage,
                 likeBtn,
@@ -550,6 +603,9 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
             commentCount =
                     itemView.findViewById(R.id.commentCount);
+
+            timestampTextView =
+                    itemView.findViewById(R.id.timestampTextView);
 
             postImage =
                     itemView.findViewById(R.id.postImageView);
