@@ -2,6 +2,7 @@ package com.example.bunnycare;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.text.TextUtils;
 import android.util.Patterns;
 import android.view.View;
@@ -13,8 +14,26 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialException;
 
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.firestore.FirebaseFirestore;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executor;
 
 public class Login extends AppCompatActivity {
 
@@ -32,6 +51,10 @@ public class Login extends AppCompatActivity {
     private ProgressBar progressBar;
 
     private FirebaseAuth auth;
+    private FirebaseFirestore db;
+
+    private CredentialManager credentialManager;
+    private CancellationSignal cancellationSignal;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,6 +63,9 @@ public class Login extends AppCompatActivity {
         setContentView(R.layout.activity_login);
 
         auth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
+        credentialManager = CredentialManager.create(this);
 
         username = findViewById(R.id.username);
         password = findViewById(R.id.password);
@@ -92,17 +118,238 @@ public class Login extends AppCompatActivity {
             forgotPass.setOnClickListener(v -> resetPassword());
         }
 
+        // ----- Google Sign-In setup (Credential Manager) -----
+
         if (btnGoogleLogin != null) {
-            btnGoogleLogin.setOnClickListener(v -> {
+            btnGoogleLogin.setOnClickListener(v -> signInWithGoogle());
+        }
+    }
+
+    private void signInWithGoogle() {
+
+        showLoading(true);
+
+        GetSignInWithGoogleOption signInWithGoogleOption =
+                new GetSignInWithGoogleOption.Builder(
+                        getString(R.string.default_web_client_id)
+                ).build();
+
+        GetCredentialRequest request =
+                new GetCredentialRequest.Builder()
+                        .addCredentialOption(signInWithGoogleOption)
+                        .build();
+
+        cancellationSignal = new CancellationSignal();
+
+        Executor executor = ContextCompat.getMainExecutor(this);
+
+        credentialManager.getCredentialAsync(
+                this,
+                request,
+                cancellationSignal,
+                executor,
+                new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+
+                    @Override
+                    public void onResult(GetCredentialResponse result) {
+                        handleSignIn(result);
+                    }
+
+                    @Override
+                    public void onError(GetCredentialException e) {
+
+                        showLoading(false);
+
+                        android.util.Log.e(
+                                "CredentialManager",
+                                "Google Sign-In failed",
+                                e
+                        );
+
+                        Toast.makeText(
+                                Login.this,
+                                "Google Sign-In Failed: " + e.getMessage(),
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                }
+        );
+    }
+
+    private void handleSignIn(GetCredentialResponse result) {
+
+        Credential credential = result.getCredential();
+
+        if (credential instanceof CustomCredential
+                && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                .equals(((CustomCredential) credential).getType())) {
+
+            try {
+
+                GoogleIdTokenCredential googleIdTokenCredential =
+                        GoogleIdTokenCredential.createFrom(
+                                ((CustomCredential) credential).getData()
+                        );
+
+                firebaseAuthWithGoogle(googleIdTokenCredential);
+
+            } catch (Exception e) {
+
+                showLoading(false);
+
+                android.util.Log.e(
+                        "CredentialManager",
+                        "Failed to parse Google ID token",
+                        e
+                );
 
                 Toast.makeText(
                         Login.this,
-                        "Google login is not configured yet.",
+                        "Google Sign-In Failed",
                         Toast.LENGTH_SHORT
                 ).show();
+            }
 
-            });
+        } else {
+
+            showLoading(false);
+
+            Toast.makeText(
+                    Login.this,
+                    "Unexpected credential type",
+                    Toast.LENGTH_SHORT
+            ).show();
         }
+    }
+
+    private void firebaseAuthWithGoogle(
+            GoogleIdTokenCredential googleIdTokenCredential
+    ) {
+
+        AuthCredential firebaseCredential =
+                GoogleAuthProvider.getCredential(
+                        googleIdTokenCredential.getIdToken(),
+                        null
+                );
+
+        auth.signInWithCredential(firebaseCredential)
+                .addOnCompleteListener(this, task -> {
+
+                    if (task.isSuccessful()) {
+
+                        FirebaseUser user =
+                                auth.getCurrentUser();
+
+                        if (user != null) {
+
+                            boolean isNewUser =
+                                    task.getResult()
+                                            .getAdditionalUserInfo()
+                                            .isNewUser();
+
+                            String uid = user.getUid();
+
+                            if (isNewUser) {
+
+                                Map<String, Object> userMap =
+                                        new HashMap<>();
+
+                                userMap.put(
+                                        "firstName",
+                                        googleIdTokenCredential.getGivenName()
+                                );
+
+                                userMap.put(
+                                        "lastName",
+                                        googleIdTokenCredential.getFamilyName()
+                                );
+
+                                userMap.put(
+                                        "username",
+                                        googleIdTokenCredential.getDisplayName()
+                                );
+
+                                userMap.put(
+                                        "email",
+                                        googleIdTokenCredential.getId()
+                                );
+
+                                userMap.put(
+                                        "verified",
+                                        true
+                                );
+
+                                db.collection("users")
+                                        .document(uid)
+                                        .set(userMap)
+                                        .addOnCompleteListener(
+                                                saveTask -> {
+
+                                                    showLoading(false);
+
+                                                    openHome();
+                                                }
+                                        );
+
+                            } else {
+
+                                showLoading(false);
+
+                                openHome();
+                            }
+
+                        } else {
+
+                            showLoading(false);
+
+                            Toast.makeText(
+                                    Login.this,
+                                    "Unable to get Google account",
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        }
+
+                    } else {
+
+                        showLoading(false);
+
+                        String message =
+                                "Google Sign-In Failed";
+
+                        if (task.getException() != null) {
+                            message =
+                                    task.getException().getMessage();
+
+                            android.util.Log.e(
+                                    "GoogleSignIn",
+                                    "Firebase auth failed",
+                                    task.getException()
+                            );
+                        }
+
+                        Toast.makeText(
+                                Login.this,
+                                message,
+                                Toast.LENGTH_LONG
+                        ).show();
+                    }
+                });
+    }
+
+    private void openHome() {
+
+        Intent intent = new Intent(
+                Login.this,
+                HomeActivity.class
+        );
+
+        intent.addFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+        );
+
+        startActivity(intent);
+        finish();
     }
 
     private void loginUser() {
@@ -136,30 +383,63 @@ public class Login extends AppCompatActivity {
         auth.signInWithEmailAndPassword(email, pass)
                 .addOnCompleteListener(this, task -> {
 
-                    showLoading(false);
-
                     if (task.isSuccessful()) {
 
-                        Toast.makeText(
-                                Login.this,
-                                "Login successful",
-                                Toast.LENGTH_SHORT
-                        ).show();
+                        FirebaseUser firebaseUser =
+                                auth.getCurrentUser();
 
-                        Intent intent = new Intent(
-                                Login.this,
-                                HomeActivity.class
-                        );
+                        if (firebaseUser == null) {
 
-                        intent.addFlags(
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                                        Intent.FLAG_ACTIVITY_NEW_TASK
-                        );
+                            showLoading(false);
 
-                        startActivity(intent);
-                        finish();
+                            Toast.makeText(
+                                    Login.this,
+                                    "Login failed",
+                                    Toast.LENGTH_LONG
+                            ).show();
+
+                            return;
+                        }
+
+                        firebaseUser.reload()
+                                .addOnCompleteListener(reloadTask -> {
+
+                                    if (!firebaseUser.isEmailVerified()) {
+
+                                        firebaseUser
+                                                .sendEmailVerification()
+                                                .addOnCompleteListener(
+                                                        verifyTask -> {
+
+                                                            showLoading(false);
+
+                                                            auth.signOut();
+
+                                                            Toast.makeText(
+                                                                    Login.this,
+                                                                    "Please verify your email. A new verification link has been sent.",
+                                                                    Toast.LENGTH_LONG
+                                                            ).show();
+                                                        }
+                                                );
+
+                                        return;
+                                    }
+
+                                    showLoading(false);
+
+                                    Toast.makeText(
+                                            Login.this,
+                                            "Login successful",
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+
+                                    openHome();
+                                });
 
                     } else {
+
+                        showLoading(false);
 
                         String message = "Login failed";
 
@@ -225,6 +505,16 @@ public class Login extends AppCompatActivity {
                         ).show();
                     }
                 });
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        if (cancellationSignal != null) {
+            cancellationSignal.cancel();
+        }
+
+        super.onDestroy();
     }
 
     private void showLoading(boolean loading) {

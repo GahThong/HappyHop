@@ -3,9 +3,12 @@ package com.example.bunnycare;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.Toast;
@@ -24,15 +27,21 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemListener {
 
     private RecyclerView recyclerView;
     private RabbitAdapter adapter;
     private List<Rabbit> rabbitList;
+    private final List<Rabbit> allRabbits = new ArrayList<>();
+
+    private EditText editSearchRabbit;
+    private String currentQuery = "";
 
     private ImageButton btnAddRabbitHeader;
     private View emptyState;
+    private View noResultsState;
     private View btnAddFirstRabbit;
     private LinearLayout rabbitHeader;
 
@@ -83,9 +92,11 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
 
         recyclerView = view.findViewById(R.id.recyclerRabbits);
         emptyState = view.findViewById(R.id.emptyState);
+        noResultsState = view.findViewById(R.id.noResultsState);
         btnAddFirstRabbit = view.findViewById(R.id.btnAddFirstRabbit);
         btnAddRabbitHeader = view.findViewById(R.id.btnAddRabbitHeader);
         rabbitHeader = view.findViewById(R.id.rabbitHeader);
+        editSearchRabbit = view.findViewById(R.id.editSearchRabbit);
 
         recyclerView.setLayoutManager(
                 new LinearLayoutManager(requireContext())
@@ -105,6 +116,28 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
 
         btnAddRabbitHeader.setOnClickListener(addRabbitListener);
         btnAddFirstRabbit.setOnClickListener(addRabbitListener);
+
+        if (editSearchRabbit != null) {
+
+            editSearchRabbit.addTextChangedListener(new TextWatcher() {
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+                    currentQuery = s.toString().trim().toLowerCase(Locale.getDefault());
+
+                    applyFilter();
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
+        }
 
         loadRabbits(null);
     }
@@ -344,16 +377,9 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
                 .delete()
                 .addOnSuccessListener(unused -> {
 
-                    int position = rabbitList.indexOf(rabbit);
+                    allRabbits.remove(rabbit);
 
-                    if (position >= 0) {
-
-                        rabbitList.remove(position);
-
-                        adapter.notifyItemRemoved(position);
-                    }
-
-                    updateEmptyState();
+                    applyFilter();
 
                     Toast.makeText(
                             requireContext(),
@@ -383,28 +409,74 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
         return name;
     }
 
+    /**
+     * Filters allRabbits by currentQuery (matched against the rabbit's name)
+     * into rabbitList, which the adapter is bound to, then refreshes the UI.
+     */
+    private void applyFilter() {
+
+        if (rabbitList == null || adapter == null) {
+            return;
+        }
+
+        rabbitList.clear();
+
+        if (currentQuery.isEmpty()) {
+
+            rabbitList.addAll(allRabbits);
+
+        } else {
+
+            for (Rabbit rabbit : allRabbits) {
+
+                String name = rabbit.getRabbitName();
+
+                if (name != null
+                        && name.toLowerCase(Locale.getDefault()).contains(currentQuery)) {
+
+                    rabbitList.add(rabbit);
+                }
+            }
+        }
+
+        adapter.notifyDataSetChanged();
+
+        updateEmptyState();
+    }
+
     private void updateEmptyState() {
 
         if (emptyState == null ||
+                noResultsState == null ||
                 recyclerView == null ||
                 rabbitHeader == null) {
             return;
         }
 
-        boolean empty =
-                rabbitList == null ||
-                        rabbitList.isEmpty();
+        boolean hasAnyRabbits = !allRabbits.isEmpty();
+        boolean hasVisibleResults = rabbitList != null && !rabbitList.isEmpty();
 
-        if (empty) {
+        if (!hasAnyRabbits) {
 
+            // No rabbits at all — show the full "add your first rabbit" state.
             rabbitHeader.setVisibility(View.GONE);
             emptyState.setVisibility(View.VISIBLE);
+            noResultsState.setVisibility(View.GONE);
+            recyclerView.setVisibility(View.GONE);
+
+        } else if (!hasVisibleResults) {
+
+            // Rabbits exist, but none match the current search.
+            rabbitHeader.setVisibility(View.VISIBLE);
+            emptyState.setVisibility(View.GONE);
+            noResultsState.setVisibility(View.VISIBLE);
             recyclerView.setVisibility(View.GONE);
 
         } else {
 
             rabbitHeader.setVisibility(View.VISIBLE);
             emptyState.setVisibility(View.GONE);
+            noResultsState.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
         }
     }
@@ -416,6 +488,8 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
         if (FirebaseAuth
                 .getInstance()
                 .getCurrentUser() == null) {
+
+            allRabbits.clear();
 
             if (rabbitList != null) {
                 rabbitList.clear();
@@ -447,7 +521,7 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
                                 return;
                             }
 
-                            rabbitList.clear();
+                            allRabbits.clear();
 
                             for (
                                     QueryDocumentSnapshot document
@@ -465,15 +539,13 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
                                             document.getId()
                                     );
 
-                                    rabbitList.add(
+                                    allRabbits.add(
                                             rabbit
                                     );
                                 }
                             }
 
-                            adapter.notifyDataSetChanged();
-
-                            updateEmptyState();
+                            applyFilter();
 
                             if (onComplete != null) {
                                 onComplete.run();

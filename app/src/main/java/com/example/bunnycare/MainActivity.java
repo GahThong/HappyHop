@@ -28,6 +28,25 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_opening);
 
+        FirebaseApp.initializeApp(this);
+
+        auth = FirebaseAuth.getInstance();
+
+        if (auth.getCurrentUser() != null) {
+
+            Intent intent = new Intent(MainActivity.this, HomeActivity.class);
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                            Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            startActivity(intent);
+            finish();
+
+            return;
+        }
+
         Window window = getWindow();
 
         window.setStatusBarColor(Color.rgb(245, 235, 208));
@@ -37,11 +56,8 @@ public class MainActivity extends AppCompatActivity {
                 View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         );
 
-        FirebaseApp.initializeApp(this);
-
         FirebaseAppCheck firebaseAppCheck = FirebaseAppCheck.getInstance();
         firebaseAppCheck.installAppCheckProviderFactory(
-
                 DebugAppCheckProviderFactory.getInstance()
         );
 
@@ -62,5 +78,5 @@ public class MainActivity extends AppCompatActivity {
             });
         }
     }
-    
+
 }

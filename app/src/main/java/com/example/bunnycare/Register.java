@@ -2,6 +2,7 @@ package com.example.bunnycare;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.text.TextUtils;
 import android.util.Patterns;
 import android.view.View;
@@ -12,16 +13,18 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialException;
 
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.tasks.Task;
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
@@ -31,6 +34,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 public class Register extends AppCompatActivity {
 
@@ -55,9 +59,8 @@ public class Register extends AppCompatActivity {
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
 
-    private GoogleSignInClient googleSignInClient;
-
-    private ActivityResultLauncher<Intent> googleSignInLauncher;
+    private CredentialManager credentialManager;
+    private CancellationSignal cancellationSignal;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +70,8 @@ public class Register extends AppCompatActivity {
 
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
+
+        credentialManager = CredentialManager.create(this);
 
         firstName = findViewById(R.id.firstName);
         lastName = findViewById(R.id.lastName);
@@ -121,105 +126,121 @@ public class Register extends AppCompatActivity {
             });
         }
 
-        GoogleSignInOptions gso =
-                new GoogleSignInOptions.Builder(
-                        GoogleSignInOptions.DEFAULT_SIGN_IN
-                )
-                        .requestIdToken(
-                                getString(
-                                        R.string.default_web_client_id
-                                )
-                        )
-                        .requestEmail()
-                        .build();
-
-        googleSignInClient =
-                GoogleSignIn.getClient(this, gso);
-
-        googleSignInLauncher =
-                registerForActivityResult(
-                        new ActivityResultContracts.StartActivityForResult(),
-                        result -> {
-
-                            if (result.getResultCode() == RESULT_OK) {
-
-                                Intent data = result.getData();
-
-                                if (data == null) {
-
-                                    showLoading(false);
-
-                                    Toast.makeText(
-                                            Register.this,
-                                            "Google Sign-Up Failed",
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-
-                                    return;
-                                }
-
-                                Task<GoogleSignInAccount> task =
-                                        GoogleSignIn
-                                                .getSignedInAccountFromIntent(
-                                                        data
-                                                );
-
-                                try {
-
-                                    GoogleSignInAccount account =
-                                            task.getResult(
-                                                    ApiException.class
-                                            );
-
-                                    if (account != null) {
-                                        firebaseAuthWithGoogle(account);
-                                    } else {
-                                        showLoading(false);
-                                    }
-
-                                } catch (ApiException e) {
-
-                                    showLoading(false);
-
-                                    Toast.makeText(
-                                            Register.this,
-                                            "Google Sign-Up Failed",
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-                                }
-
-                            } else {
-
-                                showLoading(false);
-                            }
-                        }
-                );
+        // ----- Google Sign-Up setup (Credential Manager) -----
 
         if (btnGoogleSignUp != null) {
+            btnGoogleSignUp.setOnClickListener(v -> signInWithGoogle());
+        }
+    }
 
-            btnGoogleSignUp.setOnClickListener(v -> {
+    private void signInWithGoogle() {
 
-                showLoading(true);
+        showLoading(true);
 
-                Intent signInIntent =
-                        googleSignInClient.getSignInIntent();
+        GetSignInWithGoogleOption signInWithGoogleOption =
+                new GetSignInWithGoogleOption.Builder(
+                        getString(R.string.default_web_client_id)
+                ).build();
 
-                googleSignInLauncher.launch(signInIntent);
-            });
+        GetCredentialRequest request =
+                new GetCredentialRequest.Builder()
+                        .addCredentialOption(signInWithGoogleOption)
+                        .build();
+
+        cancellationSignal = new CancellationSignal();
+
+        Executor executor = ContextCompat.getMainExecutor(this);
+
+        credentialManager.getCredentialAsync(
+                this,
+                request,
+                cancellationSignal,
+                executor,
+                new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+
+                    @Override
+                    public void onResult(GetCredentialResponse result) {
+                        handleSignIn(result);
+                    }
+
+                    @Override
+                    public void onError(GetCredentialException e) {
+
+                        showLoading(false);
+
+                        android.util.Log.e(
+                                "CredentialManager",
+                                "Google Sign-Up failed",
+                                e
+                        );
+
+                        Toast.makeText(
+                                Register.this,
+                                "Google Sign-Up Failed: " + e.getMessage(),
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                }
+        );
+    }
+
+    private void handleSignIn(GetCredentialResponse result) {
+
+        Credential credential = result.getCredential();
+
+        if (credential instanceof CustomCredential
+                && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                .equals(((CustomCredential) credential).getType())) {
+
+            try {
+
+                GoogleIdTokenCredential googleIdTokenCredential =
+                        GoogleIdTokenCredential.createFrom(
+                                ((CustomCredential) credential).getData()
+                        );
+
+                firebaseAuthWithGoogle(googleIdTokenCredential);
+
+            } catch (Exception e) {
+
+                showLoading(false);
+
+                android.util.Log.e(
+                        "CredentialManager",
+                        "Failed to parse Google ID token",
+                        e
+                );
+
+                Toast.makeText(
+                        Register.this,
+                        "Google Sign-Up Failed",
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+
+        } else {
+
+            showLoading(false);
+
+            Toast.makeText(
+                    Register.this,
+                    "Unexpected credential type",
+                    Toast.LENGTH_SHORT
+            ).show();
         }
     }
 
     private void firebaseAuthWithGoogle(
-            GoogleSignInAccount account
+            GoogleIdTokenCredential googleIdTokenCredential
     ) {
 
-        AuthCredential credential =
+        AuthCredential firebaseCredential =
                 GoogleAuthProvider.getCredential(
-                        account.getIdToken(),
+                        googleIdTokenCredential.getIdToken(),
                         null
                 );
 
-        mAuth.signInWithCredential(credential)
+        mAuth.signInWithCredential(firebaseCredential)
                 .addOnCompleteListener(this, task -> {
 
                     if (task.isSuccessful()) {
@@ -243,22 +264,22 @@ public class Register extends AppCompatActivity {
 
                                 userMap.put(
                                         "firstName",
-                                        account.getGivenName()
+                                        googleIdTokenCredential.getGivenName()
                                 );
 
                                 userMap.put(
                                         "lastName",
-                                        account.getFamilyName()
+                                        googleIdTokenCredential.getFamilyName()
                                 );
 
                                 userMap.put(
                                         "username",
-                                        account.getDisplayName()
+                                        googleIdTokenCredential.getDisplayName()
                                 );
 
                                 userMap.put(
                                         "email",
-                                        account.getEmail()
+                                        googleIdTokenCredential.getId()
                                 );
 
                                 userMap.put(
@@ -618,6 +639,16 @@ public class Register extends AppCompatActivity {
 
         startActivity(intent);
         finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        if (cancellationSignal != null) {
+            cancellationSignal.cancel();
+        }
+
+        super.onDestroy();
     }
 
     private void showLoading(boolean loading) {

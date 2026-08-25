@@ -2,6 +2,8 @@ package com.example.bunnycare;
 
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -44,6 +46,7 @@ public class Community extends Fragment {
     Uri selectedUri;
 
     List<posts> postList;
+    List<posts> fullPostList; // unfiltered master list used for search
     PostsAdapter adapter;
 
     @Override
@@ -81,6 +84,7 @@ public class Community extends Fragment {
                 view.findViewById(R.id.recyclerView);
 
         postList = new ArrayList<>();
+        fullPostList = new ArrayList<>();
         adapter = new PostsAdapter(getContext(), postList);
 
         recyclerView.setLayoutManager(
@@ -88,6 +92,8 @@ public class Community extends Fragment {
         );
 
         recyclerView.setAdapter(adapter);
+
+        setupSearch(view);
 
         FirebaseFirestore db =
                 FirebaseFirestore.getInstance();
@@ -103,7 +109,7 @@ public class Community extends Fragment {
                         return;
                     }
 
-                    postList.clear();
+                    fullPostList.clear();
 
                     for (DocumentSnapshot doc :
                             value.getDocuments()) {
@@ -113,11 +119,17 @@ public class Community extends Fragment {
 
                         if (p != null) {
                             p.setId(doc.getId());
-                            postList.add(p);
+                            fullPostList.add(p);
                         }
                     }
 
-                    adapter.notifyDataSetChanged();
+                    // Re-apply whatever search filter is currently active
+                    EditText searchInput = view.findViewById(R.id.searchInput);
+                    String currentQuery = (searchInput != null)
+                            ? searchInput.getText().toString()
+                            : "";
+
+                    filterPosts(currentQuery);
                 });
 
         ImageButton newPostButton =
@@ -279,6 +291,64 @@ public class Community extends Fragment {
         });
     }
 
+    /**
+     * Hooks up the search EditText in the header to live-filter posts
+     * as the user types.
+     */
+    private void setupSearch(View view) {
+
+        EditText searchInput = view.findViewById(R.id.searchInput);
+
+        if (searchInput == null) {
+            return;
+        }
+
+        searchInput.addTextChangedListener(new TextWatcher() {
+
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterPosts(s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+    }
+
+    /**
+     * Filters fullPostList by post text or poster name and refreshes the
+     * RecyclerView via postList/adapter.
+     */
+    private void filterPosts(String query) {
+
+        if (fullPostList == null || postList == null || adapter == null) {
+            return;
+        }
+
+        String q = query == null ? "" : query.trim().toLowerCase();
+
+        postList.clear();
+
+        if (q.isEmpty()) {
+            postList.addAll(fullPostList);
+        } else {
+            for (posts p : fullPostList) {
+
+                String postText = p.getPost() != null ? p.getPost().toLowerCase() : "";
+                String posterName = p.getPosterName() != null ? p.getPosterName().toLowerCase() : "";
+
+                if (postText.contains(q) || posterName.contains(q)) {
+                    postList.add(p);
+                }
+            }
+        }
+
+        adapter.notifyDataSetChanged();
+    }
+
     private void savePost(
             String image,
             String comment
@@ -304,6 +374,8 @@ public class Community extends Fragment {
                             String username =
                                     "Unknown";
 
+                            String profileImageUrl = "";
+
                             if (documentSnapshot.exists()) {
 
                                 String fetchedUsername =
@@ -317,6 +389,16 @@ public class Community extends Fragment {
 
                                     username =
                                             fetchedUsername;
+                                }
+
+                                String fetchedImageUrl =
+                                        documentSnapshot
+                                                .getString(
+                                                        "imageUrl"
+                                                );
+
+                                if (fetchedImageUrl != null) {
+                                    profileImageUrl = fetchedImageUrl;
                                 }
                             }
 
@@ -341,6 +423,11 @@ public class Community extends Fragment {
                             post.put(
                                     "posterName",
                                     username
+                            );
+
+                            post.put(
+                                    "profileImage",
+                                    profileImageUrl
                             );
 
                             post.put(

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/camerapage"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -31,7 +32,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text=""
+                    android:text="HappyHop"
                     android:textColor="@color/black"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -108,18 +109,20 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:gravity="center"
-                    android:text="Identify the breed and spot visible health cues like eyes, skin &amp; posture. (reminder that happyhop makes mistakes and if concerns piles up seek professional help immediately)"
+                    android:text="Identify the breed and spot visible health cues like eyes, skin &amp; posture."
                     android:textColor="#5C4A36"
                     android:textSize="12.5sp"
                     android:lineSpacingExtra="2dp" />
 
                 <Button
                     android:id="@+id/btnOpenCamera"
+                    style="@style/Widget.AppCompat.Button"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:layout_marginTop="18dp"
                     android:background="@drawable/open_camera_button_bg"
                     android:backgroundTint="@null"
+                    app:backgroundTint="@null"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:stateListAnimator="@null"
@@ -140,12 +143,19 @@
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:id="@+id/yourRabbitsRow"
+            <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:orientation="horizontal" />
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/yourRabbitsRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+
+            </HorizontalScrollView>
 
         </LinearLayout>
 

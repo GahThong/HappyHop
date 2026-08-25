@@ -147,6 +147,25 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="SEX"
+                android:textColor="@color/black"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+
+            <Spinner
+                android:id="@+id/spinnerSex"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/rabbit_input_bg"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="17dp"
                 android:text="WEIGHT TREND"
                 android:textColor="@color/black"
@@ -285,12 +304,22 @@
                         android:background="@drawable/ai_dot" />
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_weight="1"
                         android:text="AI Health Summary"
                         android:textColor="@color/black"
                         android:textSize="13sp"
                         android:textStyle="bold" />
+
+                    <ImageButton
+                        android:id="@+id/btnViewHistory"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="View summary history"
+                        android:padding="3dp"
+                        android:src="@android:drawable/ic_menu_recent_history" />
 
                 </LinearLayout>
 

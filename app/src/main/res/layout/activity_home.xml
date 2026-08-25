@@ -7,13 +7,7 @@
     android:orientation="vertical"
     android:background="#F5EBD0">
 
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="85dp"
-        android:background="@color/Orangie"
-        android:contentDescription="App Logo"
-        android:scaleType="centerInside"
-        android:src="@drawable/logo" />
+
 
     <LinearLayout
         android:id="@+id/container"

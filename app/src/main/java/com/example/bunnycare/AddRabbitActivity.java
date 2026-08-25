@@ -16,7 +16,9 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ArrayAdapter;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -43,6 +45,7 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.SetOptions;
 
 import java.io.InputStream;
@@ -61,6 +64,7 @@ import java.util.concurrent.Executors;
 public class AddRabbitActivity extends AppCompatActivity {
 
     private ImageButton btnUploadPhoto;
+    private ImageButton btnViewHistory;
 
     private Button btnGenerateSummary;
     private Button btnSaveRabbit;
@@ -70,6 +74,10 @@ public class AddRabbitActivity extends AppCompatActivity {
     private EditText editAge;
     private EditText editLastFed;
     private EditText editLastDrink;
+
+    private Spinner spinnerSex;
+
+    private static final String[] SEX_OPTIONS = {"Male", "Female"};
 
     private TextView txtAiSummary;
     private TextView txtWeightTrend;
@@ -159,6 +167,7 @@ public class AddRabbitActivity extends AppCompatActivity {
     private void bindViews() {
 
         btnUploadPhoto = findViewById(R.id.btnUploadPhoto);
+        btnViewHistory = findViewById(R.id.btnViewHistory);
         btnGenerateSummary = findViewById(R.id.btnGenerateSummary);
         btnSaveRabbit = findViewById(R.id.btnSaveRabbit);
 
@@ -167,6 +176,20 @@ public class AddRabbitActivity extends AppCompatActivity {
         editAge = findViewById(R.id.editAge);
         editLastFed = findViewById(R.id.editLastFed);
         editLastDrink = findViewById(R.id.editLastDrink);
+
+        spinnerSex = findViewById(R.id.spinnerSex);
+
+        ArrayAdapter<String> sexAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                SEX_OPTIONS
+        );
+
+        sexAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerSex.setAdapter(sexAdapter);
 
         txtAiSummary = findViewById(R.id.txtAiSummary);
         txtWeightTrend = findViewById(R.id.txtWeightTrend);
@@ -197,6 +220,8 @@ public class AddRabbitActivity extends AppCompatActivity {
         weightTrendCard.setOnClickListener(v -> showWeightDialog());
 
         btnGenerateSummary.setOnClickListener(v -> generateAiSummary());
+
+        btnViewHistory.setOnClickListener(v -> showSummaryHistory());
 
         btnSaveRabbit.setOnClickListener(v -> saveRabbit());
     }
@@ -237,6 +262,7 @@ public class AddRabbitActivity extends AppCompatActivity {
         String name = document.getString("rabbitName");
         String breed = document.getString("breed");
         String age = document.getString("age");
+        String sex = document.getString("sex");
         String weight = document.getString("weight");
         String lastFed = document.getString("lastFed");
         String lastDrink = document.getString("lastDrink");
@@ -253,6 +279,19 @@ public class AddRabbitActivity extends AppCompatActivity {
 
         if (age != null) {
             editAge.setText(age);
+        }
+
+        if (sex != null) {
+
+            for (int i = 0; i < SEX_OPTIONS.length; i++) {
+
+                if (SEX_OPTIONS[i].equalsIgnoreCase(sex)) {
+
+                    spinnerSex.setSelection(i);
+
+                    break;
+                }
+            }
         }
 
         if (weight != null && !weight.isEmpty()) {
@@ -604,11 +643,14 @@ public class AddRabbitActivity extends AppCompatActivity {
 
         String breed = editBreed.getText().toString().trim();
         String age = editAge.getText().toString().trim();
+        String sex = spinnerSex.getSelectedItem() != null
+                ? spinnerSex.getSelectedItem().toString()
+                : "";
         String lastFed = editLastFed.getText().toString().trim();
         String lastDrink = editLastDrink.getText().toString().trim();
 
         geminiExecutor.execute(() ->
-                sendToGemini(name, breed, age, weightValue, lastFed, lastDrink, photoBitmap)
+                sendToGemini(name, breed, age, sex, weightValue, lastFed, lastDrink, photoBitmap)
         );
     }
 
@@ -616,6 +658,7 @@ public class AddRabbitActivity extends AppCompatActivity {
             String name,
             String breed,
             String age,
+            String sex,
             String weight,
             String lastFed,
             String lastDrink,
@@ -640,6 +683,10 @@ public class AddRabbitActivity extends AppCompatActivity {
 
             if (!age.isEmpty()) {
                 prompt.append(" Age: ").append(age).append(".");
+            }
+
+            if (!sex.isEmpty()) {
+                prompt.append(" Sex: ").append(sex).append(".");
             }
 
             if (!weight.isEmpty()) {
@@ -686,7 +733,11 @@ public class AddRabbitActivity extends AppCompatActivity {
                         btnGenerateSummary.setText("Generate AI Summary");
 
                         if (text != null && !text.trim().isEmpty()) {
+
                             txtAiSummary.setText(text);
+
+                            saveSummaryToHistory(text);
+
                         } else {
                             txtAiSummary.setText("No summary was generated.");
                         }
@@ -732,6 +783,95 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Saves a generated AI summary into the rabbit's summaries subcollection
+     * so past summaries aren't lost when a new one is generated.
+     */
+    private void saveSummaryToHistory(String text) {
+
+        if (rabbitRef == null) {
+            return;
+        }
+
+        Map<String, Object> entry = new HashMap<>();
+
+        entry.put("text", text);
+        entry.put("timestamp", System.currentTimeMillis());
+
+        rabbitRef.collection("summaries")
+                .add(entry)
+                .addOnFailureListener(e ->
+                        Log.e("AddRabbit", "Failed to save summary history", e)
+                );
+    }
+
+    /**
+     * Loads past AI summaries for this rabbit (newest first) and lets the
+     * user tap one to view it in full.
+     */
+    private void showSummaryHistory() {
+
+        if (rabbitRef == null) {
+            return;
+        }
+
+        rabbitRef.collection("summaries")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+
+                    if (querySnapshot.isEmpty()) {
+
+                        new AlertDialog.Builder(this)
+                                .setTitle("Summary History")
+                                .setMessage("No previous AI summaries yet. Generate one to start building history.")
+                                .setPositiveButton("OK", null)
+                                .show();
+
+                        return;
+                    }
+
+                    List<String> dates = new ArrayList<>();
+                    List<String> texts = new ArrayList<>();
+
+                    for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+
+                        String text = doc.getString("text");
+                        Long timestamp = doc.getLong("timestamp");
+
+                        if (text == null || timestamp == null) {
+                            continue;
+                        }
+
+                        dates.add(displayFormat.format(timestamp));
+                        texts.add(text);
+                    }
+
+                    if (dates.isEmpty()) {
+
+                        Toast.makeText(this, "No history entries found", Toast.LENGTH_SHORT).show();
+
+                        return;
+                    }
+
+                    CharSequence[] items = dates.toArray(new CharSequence[0]);
+
+                    new AlertDialog.Builder(this)
+                            .setTitle("Summary History")
+                            .setItems(items, (dialog, which) ->
+                                    new AlertDialog.Builder(this)
+                                            .setTitle(dates.get(which))
+                                            .setMessage(texts.get(which))
+                                            .setPositiveButton("Close", null)
+                                            .show()
+                            )
+                            .show();
+                })
+                .addOnFailureListener(e ->
+                        Toast.makeText(this, "Failed to load history: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                );
+    }
+
     private void saveRabbit() {
 
         String name = editRabbitName.getText().toString().trim();
@@ -758,9 +898,14 @@ public class AddRabbitActivity extends AppCompatActivity {
 
         Map<String, Object> map = new HashMap<>();
 
+        String sex = spinnerSex.getSelectedItem() != null
+                ? spinnerSex.getSelectedItem().toString()
+                : "";
+
         map.put("rabbitName", name);
         map.put("breed", breed);
         map.put("age", age);
+        map.put("sex", sex);
         map.put("weight", weightValue);
 
         map.put("lastFed", lastFedMillis != null

@@ -20,4 +20,6 @@
     <color name="Orangie">#EF9950</color>
     <color name="delete_red">#D9534F</color>
     <color name="border_gray">#CCCCCC</color>
+    <color name="gray_hint">#2F2F2F</color>
+
 </resources>
