@@ -15,12 +15,14 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.credentials.ClearCredentialStateRequest;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
 import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.ClearCredentialException;
 import androidx.credentials.exceptions.GetCredentialException;
 import androidx.credentials.exceptions.NoCredentialException;
 
@@ -32,9 +34,12 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import org.jetbrains.annotations.UnknownNullability;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class Login extends AppCompatActivity {
 
@@ -96,7 +101,6 @@ public class Login extends AppCompatActivity {
             forgotPass.setOnClickListener(v -> resetPassword());
         }
 
-        // ----- Google Sign-In setup (Credential Manager) -----
         if (btnGoogleLogin != null) {
             btnGoogleLogin.setOnClickListener(v -> signInWithGoogle());
         }
@@ -106,12 +110,10 @@ public class Login extends AppCompatActivity {
 
         showLoading(true);
 
-        // filterByAuthorizedAccounts(false) so brand-new Google users can sign up too,
-        // not just accounts that have used this app before.
         GetGoogleIdOption googleIdOption =
                 new GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(false)
-                        .setServerClientId(getString(R.string.default_web_client_id))
+                        .setFilterByAuthorizedAccounts(true)
+                        .setServerClientId("396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com")
                         .build();
 
         GetCredentialRequest request =
@@ -132,7 +134,7 @@ public class Login extends AppCompatActivity {
 
                     @Override
                     public void onResult(GetCredentialResponse result) {
-                        handleSignIn(result);
+                        handleSignIn(result.getCredential());
                     }
 
                     @Override
@@ -142,7 +144,6 @@ public class Login extends AppCompatActivity {
 
                         android.util.Log.e("CredentialManager", "Google Sign-In failed", e);
 
-                        // Most common real-world failure: no Google account on the device
                         if (e instanceof NoCredentialException) {
                             Toast.makeText(
                                     Login.this,
@@ -161,9 +162,7 @@ public class Login extends AppCompatActivity {
         );
     }
 
-    private void handleSignIn(GetCredentialResponse result) {
-
-        Credential credential = result.getCredential();
+    private void handleSignIn(Credential credential) {
 
         if (credential instanceof CustomCredential
                 && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
@@ -368,6 +367,34 @@ public class Login extends AppCompatActivity {
                         Toast.makeText(Login.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
+    }
+
+    public void signOut() {
+
+        auth.signOut();
+
+        ClearCredentialStateRequest clearRequest = new ClearCredentialStateRequest();
+
+        credentialManager.clearCredentialStateAsync(
+                clearRequest,
+                new CancellationSignal(),
+                Executors.newSingleThreadExecutor(),
+                new CredentialManagerCallback<Void, ClearCredentialException>() {
+
+                    @Override
+                    public void onResult(Void result) {
+                        Intent intent = new Intent(Login.this, Login.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        finish();
+                    }
+
+                    @Override
+                    public void onError(ClearCredentialException e) {
+                        android.util.Log.e("CredentialManager", "Couldn't clear credential state", e);
+                    }
+                }
+        );
     }
 
     @Override
