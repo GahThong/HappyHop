@@ -10,7 +10,10 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputFilter;
+import android.text.InputType;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -78,6 +81,10 @@ public class AddRabbitActivity extends AppCompatActivity {
     private Spinner spinnerSex;
 
     private static final String[] SEX_OPTIONS = {"Male", "Female"};
+
+    // Weight limits (kg)
+    private static final double WEIGHT_MIN_KG = 0.1;
+    private static final double WEIGHT_MAX_KG = 15.0;
 
     private TextView txtAiSummary;
     private TextView txtWeightTrend;
@@ -176,6 +183,11 @@ public class AddRabbitActivity extends AppCompatActivity {
         editAge = findViewById(R.id.editAge);
         editLastFed = findViewById(R.id.editLastFed);
         editLastDrink = findViewById(R.id.editLastDrink);
+
+        // Age: numbers only (months), no letters/symbols.
+        editAge.setInputType(InputType.TYPE_CLASS_NUMBER);
+        editAge.setFilters(new InputFilter[]{new InputFilter.LengthFilter(3)});
+        editAge.setHint("e.g. 6");
 
         spinnerSex = findViewById(R.id.spinnerSex);
 
@@ -278,7 +290,9 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
 
         if (age != null) {
-            editAge.setText(age);
+            // Strip anything non-numeric from legacy data (e.g. "6 months" -> "6")
+            String numericAge = age.replaceAll("[^0-9]", "");
+            editAge.setText(numericAge);
         }
 
         if (sex != null) {
@@ -414,46 +428,90 @@ public class AddRabbitActivity extends AppCompatActivity {
                 .dispatch();
     }
 
+    /**
+     * Weight input dialog: numeric-only field (no "kg" typing possible,
+     * decimal digits only) with a fixed, non-editable "kg" label next to it.
+     * Value is clamped to WEIGHT_MIN_KG - WEIGHT_MAX_KG.
+     */
     private void showWeightDialog() {
+
+        LinearLayout container = new LinearLayout(this);
+
+        container.setOrientation(LinearLayout.HORIZONTAL);
+
+        container.setGravity(Gravity.CENTER_VERTICAL);
+
+        int paddingPx = dpToPx(20);
+
+        container.setPadding(paddingPx, dpToPx(8), paddingPx, 0);
 
         EditText input = new EditText(this);
 
-        input.setHint("e.g. 1.9 kg");
+        input.setHint("e.g. 1.9");
 
         input.setSingleLine(true);
 
+        // Numeric decimal input only - no letters, no "kg" typable.
+        input.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_FLAG_DECIMAL
+        );
+
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(5)});
+
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+        );
+
+        input.setLayoutParams(inputParams);
+
         if (!weightValue.isEmpty()) {
 
-            input.setText(weightValue);
+            String numericOnly = weightValue.replaceAll("[^0-9.]", "");
+
+            input.setText(numericOnly);
 
             input.setSelection(input.getText().length());
         }
 
+        TextView kgLabel = new TextView(this);
+
+        kgLabel.setText("kg");
+
+        kgLabel.setPadding(dpToPx(8), 0, 0, 0);
+
+        container.addView(input);
+        container.addView(kgLabel);
+
         new AlertDialog.Builder(this)
                 .setTitle("Current Weight")
-                .setView(input)
+                .setView(container)
                 .setPositiveButton("Save", (dialog, which) -> {
 
-                    String weight = input.getText().toString().trim();
+                    String raw = input.getText().toString().trim();
 
-                    if (weight.isEmpty()) {
-                        return;
-                    }
-
-                    String numericPart = weight.replaceAll("[^0-9.]", "");
-
-                    if (numericPart.isEmpty()) {
-
-                        Toast.makeText(this, "Enter a valid number", Toast.LENGTH_SHORT).show();
-
+                    if (raw.isEmpty()) {
                         return;
                     }
 
                     try {
 
-                        double parsed = Double.parseDouble(numericPart);
+                        double parsed = Double.parseDouble(raw);
 
-                        weightValue = weight;
+                        if (parsed < WEIGHT_MIN_KG || parsed > WEIGHT_MAX_KG) {
+
+                            Toast.makeText(
+                                    this,
+                                    "Weight must be between " + WEIGHT_MIN_KG + " kg and " + WEIGHT_MAX_KG + " kg",
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            return;
+                        }
+
+                        weightValue = parsed + " kg";
 
                         if (weightEditedThisSession && !weightHistory.isEmpty()) {
 
@@ -682,7 +740,7 @@ public class AddRabbitActivity extends AppCompatActivity {
             }
 
             if (!age.isEmpty()) {
-                prompt.append(" Age: ").append(age).append(".");
+                prompt.append(" Age: ").append(age).append(" months.");
             }
 
             if (!sex.isEmpty()) {
@@ -885,6 +943,31 @@ public class AddRabbitActivity extends AppCompatActivity {
             editRabbitName.requestFocus();
 
             return;
+        }
+
+        if (!age.isEmpty()) {
+
+            try {
+
+                int ageMonths = Integer.parseInt(age);
+
+                if (ageMonths < 0) {
+
+                    editAge.setError("Enter a valid age");
+
+                    editAge.requestFocus();
+
+                    return;
+                }
+
+            } catch (NumberFormatException e) {
+
+                editAge.setError("Numbers only");
+
+                editAge.requestFocus();
+
+                return;
+            }
         }
 
         if (FirebaseAuth.getInstance().getCurrentUser() == null) {

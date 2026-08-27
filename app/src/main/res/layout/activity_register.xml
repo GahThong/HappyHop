@@ -285,15 +285,6 @@
                 android:textStyle="bold"
                 app:backgroundTint="@null" />
 
-            <TextView
-                android:id="@+id/textLogin"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Already have an account? Log in"
-                android:textColor="#8F7458"
-                android:textSize="13sp" />
-
             <ProgressBar
                 android:id="@+id/progressBar"
                 android:layout_width="wrap_content"

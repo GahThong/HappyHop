@@ -114,23 +114,67 @@
                     android:textSize="12.5sp"
                     android:lineSpacingExtra="2dp" />
 
-                <Button
-                    android:id="@+id/btnOpenCamera"
-                    style="@style/Widget.AppCompat.Button"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="52dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
-                    android:background="@drawable/open_camera_button_bg"
-                    android:backgroundTint="@null"
-                    app:backgroundTint="@null"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:stateListAnimator="@null"
-                    android:text="Open Camera"
-                    android:textAllCaps="false"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnOpenCamera"
+                        style="@style/Widget.AppCompat.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/open_camera_button_bg"
+                        android:backgroundTint="@null"
+                        app:backgroundTint="@null"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:stateListAnimator="@null"
+                        android:text="Take Photo"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:maxLines="1"
+                        android:ellipsize="none"
+                        android:autoSizeTextType="uniform"
+                        android:autoSizeMinTextSize="10sp"
+                        android:autoSizeMaxTextSize="14sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnUploadPhoto"
+                        style="@style/Widget.AppCompat.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/open_camera_button_bg"
+                        android:backgroundTint="@null"
+                        app:backgroundTint="@null"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:stateListAnimator="@null"
+                        android:text="Upload Photo"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:maxLines="1"
+                        android:ellipsize="none"
+                        android:autoSizeTextType="uniform"
+                        android:autoSizeMinTextSize="10sp"
+                        android:autoSizeMaxTextSize="14sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
 
             </LinearLayout>
 

@@ -22,8 +22,9 @@ import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
 
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
@@ -45,7 +46,6 @@ public class Login extends AppCompatActivity {
 
     private TextView btnLoginTab;
     private TextView btnCreateAccount;
-    private TextView textSignUp;
     private TextView forgotPass;
 
     private ProgressBar progressBar;
@@ -76,7 +76,6 @@ public class Login extends AppCompatActivity {
         btnLoginTab = findViewById(R.id.btnLoginTab);
         btnCreateAccount = findViewById(R.id.btnCreateAccount);
 
-        textSignUp = findViewById(R.id.textSignUp);
         forgotPass = findViewById(R.id.forgotPass);
 
         progressBar = findViewById(R.id.progressBar);
@@ -85,30 +84,9 @@ public class Login extends AppCompatActivity {
             btnGoLogin.setOnClickListener(v -> loginUser());
         }
 
-        if (btnLoginTab != null) {
-            btnLoginTab.setOnClickListener(v -> {
-            });
-        }
-
         if (btnCreateAccount != null) {
             btnCreateAccount.setOnClickListener(v -> {
-                Intent intent = new Intent(
-                        Login.this,
-                        Register.class
-                );
-
-                startActivity(intent);
-                finish();
-            });
-        }
-
-        if (textSignUp != null) {
-            textSignUp.setOnClickListener(v -> {
-                Intent intent = new Intent(
-                        Login.this,
-                        Register.class
-                );
-
+                Intent intent = new Intent(Login.this, Register.class);
                 startActivity(intent);
                 finish();
             });
@@ -119,7 +97,6 @@ public class Login extends AppCompatActivity {
         }
 
         // ----- Google Sign-In setup (Credential Manager) -----
-
         if (btnGoogleLogin != null) {
             btnGoogleLogin.setOnClickListener(v -> signInWithGoogle());
         }
@@ -129,14 +106,17 @@ public class Login extends AppCompatActivity {
 
         showLoading(true);
 
-        GetSignInWithGoogleOption signInWithGoogleOption =
-                new GetSignInWithGoogleOption.Builder(
-                        getString(R.string.default_web_client_id)
-                ).build();
+        // filterByAuthorizedAccounts(false) so brand-new Google users can sign up too,
+        // not just accounts that have used this app before.
+        GetGoogleIdOption googleIdOption =
+                new GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(getString(R.string.default_web_client_id))
+                        .build();
 
         GetCredentialRequest request =
                 new GetCredentialRequest.Builder()
-                        .addCredentialOption(signInWithGoogleOption)
+                        .addCredentialOption(googleIdOption)
                         .build();
 
         cancellationSignal = new CancellationSignal();
@@ -160,17 +140,22 @@ public class Login extends AppCompatActivity {
 
                         showLoading(false);
 
-                        android.util.Log.e(
-                                "CredentialManager",
-                                "Google Sign-In failed",
-                                e
-                        );
+                        android.util.Log.e("CredentialManager", "Google Sign-In failed", e);
 
-                        Toast.makeText(
-                                Login.this,
-                                "Google Sign-In Failed: " + e.getMessage(),
-                                Toast.LENGTH_SHORT
-                        ).show();
+                        // Most common real-world failure: no Google account on the device
+                        if (e instanceof NoCredentialException) {
+                            Toast.makeText(
+                                    Login.this,
+                                    "No Google account found on this device. Please add one in Settings.",
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        } else {
+                            Toast.makeText(
+                                    Login.this,
+                                    "Google Sign-In failed: " + e.getMessage(),
+                                    Toast.LENGTH_SHORT
+                            ).show();
+                        }
                     }
                 }
         );
@@ -185,169 +170,89 @@ public class Login extends AppCompatActivity {
                 .equals(((CustomCredential) credential).getType())) {
 
             try {
-
                 GoogleIdTokenCredential googleIdTokenCredential =
-                        GoogleIdTokenCredential.createFrom(
-                                ((CustomCredential) credential).getData()
-                        );
+                        GoogleIdTokenCredential.createFrom(((CustomCredential) credential).getData());
 
                 firebaseAuthWithGoogle(googleIdTokenCredential);
 
             } catch (Exception e) {
-
                 showLoading(false);
-
-                android.util.Log.e(
-                        "CredentialManager",
-                        "Failed to parse Google ID token",
-                        e
-                );
-
-                Toast.makeText(
-                        Login.this,
-                        "Google Sign-In Failed",
-                        Toast.LENGTH_SHORT
-                ).show();
+                android.util.Log.e("CredentialManager", "Failed to parse Google ID token", e);
+                Toast.makeText(Login.this, "Google Sign-In Failed", Toast.LENGTH_SHORT).show();
             }
 
         } else {
-
             showLoading(false);
-
-            Toast.makeText(
-                    Login.this,
-                    "Unexpected credential type",
-                    Toast.LENGTH_SHORT
-            ).show();
+            Toast.makeText(Login.this, "Unexpected credential type", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void firebaseAuthWithGoogle(
-            GoogleIdTokenCredential googleIdTokenCredential
-    ) {
+    private void firebaseAuthWithGoogle(GoogleIdTokenCredential googleIdTokenCredential) {
 
         AuthCredential firebaseCredential =
-                GoogleAuthProvider.getCredential(
-                        googleIdTokenCredential.getIdToken(),
-                        null
-                );
+                GoogleAuthProvider.getCredential(googleIdTokenCredential.getIdToken(), null);
 
         auth.signInWithCredential(firebaseCredential)
                 .addOnCompleteListener(this, task -> {
 
                     if (task.isSuccessful()) {
 
-                        FirebaseUser user =
-                                auth.getCurrentUser();
+                        FirebaseUser user = auth.getCurrentUser();
 
                         if (user != null) {
 
                             boolean isNewUser =
-                                    task.getResult()
-                                            .getAdditionalUserInfo()
-                                            .isNewUser();
+                                    task.getResult().getAdditionalUserInfo() != null
+                                            && task.getResult().getAdditionalUserInfo().isNewUser();
 
                             String uid = user.getUid();
 
                             if (isNewUser) {
 
-                                Map<String, Object> userMap =
-                                        new HashMap<>();
-
-                                userMap.put(
-                                        "firstName",
-                                        googleIdTokenCredential.getGivenName()
-                                );
-
-                                userMap.put(
-                                        "lastName",
-                                        googleIdTokenCredential.getFamilyName()
-                                );
-
-                                userMap.put(
-                                        "username",
-                                        googleIdTokenCredential.getDisplayName()
-                                );
-
-                                userMap.put(
-                                        "email",
-                                        googleIdTokenCredential.getId()
-                                );
-
-                                userMap.put(
-                                        "verified",
-                                        true
-                                );
+                                Map<String, Object> userMap = new HashMap<>();
+                                userMap.put("firstName", googleIdTokenCredential.getGivenName());
+                                userMap.put("lastName", googleIdTokenCredential.getFamilyName());
+                                userMap.put("username", googleIdTokenCredential.getDisplayName());
+                                userMap.put("email", googleIdTokenCredential.getId());
+                                userMap.put("verified", true);
 
                                 db.collection("users")
                                         .document(uid)
                                         .set(userMap)
-                                        .addOnCompleteListener(
-                                                saveTask -> {
-
-                                                    showLoading(false);
-
-                                                    openHome();
-                                                }
-                                        );
+                                        .addOnCompleteListener(saveTask -> {
+                                            showLoading(false);
+                                            openHome();
+                                        });
 
                             } else {
-
                                 showLoading(false);
-
                                 openHome();
                             }
 
                         } else {
-
                             showLoading(false);
-
-                            Toast.makeText(
-                                    Login.this,
-                                    "Unable to get Google account",
-                                    Toast.LENGTH_LONG
-                            ).show();
+                            Toast.makeText(Login.this, "Unable to get Google account", Toast.LENGTH_LONG).show();
                         }
 
                     } else {
 
                         showLoading(false);
 
-                        String message =
-                                "Google Sign-In Failed";
+                        String message = "Google Sign-In Failed";
 
                         if (task.getException() != null) {
-                            message =
-                                    task.getException().getMessage();
-
-                            android.util.Log.e(
-                                    "GoogleSignIn",
-                                    "Firebase auth failed",
-                                    task.getException()
-                            );
+                            message = task.getException().getMessage();
+                            android.util.Log.e("GoogleSignIn", "Firebase auth failed", task.getException());
                         }
 
-                        Toast.makeText(
-                                Login.this,
-                                message,
-                                Toast.LENGTH_LONG
-                        ).show();
+                        Toast.makeText(Login.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
     private void openHome() {
-
-        Intent intent = new Intent(
-                Login.this,
-                HomeActivity.class
-        );
-
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-        );
-
+        Intent intent = new Intent(Login.this, HomeActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
     }
@@ -385,74 +290,47 @@ public class Login extends AppCompatActivity {
 
                     if (task.isSuccessful()) {
 
-                        FirebaseUser firebaseUser =
-                                auth.getCurrentUser();
+                        FirebaseUser firebaseUser = auth.getCurrentUser();
 
                         if (firebaseUser == null) {
-
                             showLoading(false);
-
-                            Toast.makeText(
-                                    Login.this,
-                                    "Login failed",
-                                    Toast.LENGTH_LONG
-                            ).show();
-
+                            Toast.makeText(Login.this, "Login failed", Toast.LENGTH_LONG).show();
                             return;
                         }
 
-                        firebaseUser.reload()
-                                .addOnCompleteListener(reloadTask -> {
+                        firebaseUser.reload().addOnCompleteListener(reloadTask -> {
 
-                                    if (!firebaseUser.isEmailVerified()) {
+                            if (!firebaseUser.isEmailVerified()) {
 
-                                        firebaseUser
-                                                .sendEmailVerification()
-                                                .addOnCompleteListener(
-                                                        verifyTask -> {
+                                firebaseUser.sendEmailVerification()
+                                        .addOnCompleteListener(verifyTask -> {
+                                            showLoading(false);
+                                            auth.signOut();
+                                            Toast.makeText(
+                                                    Login.this,
+                                                    "Please verify your email. A new verification link has been sent.",
+                                                    Toast.LENGTH_LONG
+                                            ).show();
+                                        });
 
-                                                            showLoading(false);
+                                return;
+                            }
 
-                                                            auth.signOut();
-
-                                                            Toast.makeText(
-                                                                    Login.this,
-                                                                    "Please verify your email. A new verification link has been sent.",
-                                                                    Toast.LENGTH_LONG
-                                                            ).show();
-                                                        }
-                                                );
-
-                                        return;
-                                    }
-
-                                    showLoading(false);
-
-                                    Toast.makeText(
-                                            Login.this,
-                                            "Login successful",
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-
-                                    openHome();
-                                });
+                            showLoading(false);
+                            Toast.makeText(Login.this, "Login successful", Toast.LENGTH_SHORT).show();
+                            openHome();
+                        });
 
                     } else {
 
                         showLoading(false);
 
                         String message = "Login failed";
-
                         if (task.getException() != null) {
-                            message =
-                                    task.getException().getMessage();
+                            message += task.getException().getMessage();
                         }
 
-                        Toast.makeText(
-                                Login.this,
-                                message,
-                                Toast.LENGTH_LONG
-                        ).show();
+                        Toast.makeText(Login.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -481,74 +359,32 @@ public class Login extends AppCompatActivity {
                     showLoading(false);
 
                     if (task.isSuccessful()) {
-
-                        Toast.makeText(
-                                Login.this,
-                                "Password reset email sent",
-                                Toast.LENGTH_LONG
-                        ).show();
-
+                        Toast.makeText(Login.this, "Password reset email sent", Toast.LENGTH_LONG).show();
                     } else {
-
-                        String message =
-                                "Unable to send reset email";
-
+                        String message = "Unable to send reset email";
                         if (task.getException() != null) {
-                            message =
-                                    task.getException().getMessage();
+                            message = task.getException().getMessage();
                         }
-
-                        Toast.makeText(
-                                Login.this,
-                                message,
-                                Toast.LENGTH_LONG
-                        ).show();
+                        Toast.makeText(Login.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
     @Override
     protected void onDestroy() {
-
         if (cancellationSignal != null) {
             cancellationSignal.cancel();
         }
-
         super.onDestroy();
     }
 
     private void showLoading(boolean loading) {
 
-        if (progressBar != null) {
-            progressBar.setVisibility(
-                    loading
-                            ? View.VISIBLE
-                            : View.GONE
-            );
-        }
-
-        if (btnGoLogin != null) {
-            btnGoLogin.setEnabled(!loading);
-        }
-
-        if (btnCreateAccount != null) {
-            btnCreateAccount.setEnabled(!loading);
-        }
-
-        if (textSignUp != null) {
-            textSignUp.setEnabled(!loading);
-        }
-
-        if (forgotPass != null) {
-            forgotPass.setEnabled(!loading);
-        }
-
-        if (btnLoginTab != null) {
-            btnLoginTab.setEnabled(!loading);
-        }
-
-        if (btnGoogleLogin != null) {
-            btnGoogleLogin.setEnabled(!loading);
-        }
+        if (progressBar != null) progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
+        if (btnGoLogin != null) btnGoLogin.setEnabled(!loading);
+        if (btnCreateAccount != null) btnCreateAccount.setEnabled(!loading);
+        if (forgotPass != null) forgotPass.setEnabled(!loading);
+        if (btnLoginTab != null) btnLoginTab.setEnabled(!loading);
+        if (btnGoogleLogin != null) btnGoogleLogin.setEnabled(!loading);
     }
 }

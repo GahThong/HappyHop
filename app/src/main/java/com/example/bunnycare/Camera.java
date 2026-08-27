@@ -6,14 +6,19 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.text.LineBreaker;
 import android.media.ThumbnailUtils;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.Layout;
+import android.text.method.LinkMovementMethod;
+import android.text.util.Linkify;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -64,7 +69,15 @@ import java.util.concurrent.Executors;
 public class Camera extends Fragment {
 
     int imageSize = 224;
-    String currentMode = "BREED";
+
+    // Confidence gate used on the breed model to decide whether a rabbit
+    // is present in the photo at all.
+    static final float RABBIT_PRESENCE_THRESHOLD = 0.95f;
+    // Confidence needed before we report a specific disease instead of
+    // "No signs of illness detected".
+    static final float DISEASE_REPORT_THRESHOLD = 0.95f;
+
+    static final String NO_ILLNESS_LABEL = "No signs of illness detected";
 
     String[] breedLabels = {
             "Holland",
@@ -90,8 +103,15 @@ public class Camera extends Fragment {
     };
 
     ActivityResultLauncher<Void> takePictureLauncher;
+    ActivityResultLauncher<Void> featureCameraLauncher;
+    ActivityResultLauncher<String> mainImagePickerLauncher;
     ActivityResultLauncher<String> featurePickerLauncher;
     ActivityResultLauncher<String> permissionLauncher;
+
+    // Tracks whether a pending camera permission request was triggered by
+    // the main scan flow or by the per-feature close-up capture flow, so
+    // the permission callback knows which launcher to resume with.
+    boolean pendingFeatureCameraCapture = false;
 
     Executor geminiExecutor = Executors.newSingleThreadExecutor();
 
@@ -118,6 +138,7 @@ public class Camera extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
 
         Button btnOpenCamera = view.findViewById(R.id.btnOpenCamera);
+        Button btnUploadPhoto = view.findViewById(R.id.btnUploadPhoto);
 
         statusBadge = view.findViewById(R.id.statusBadge);
         statusDot = view.findViewById(R.id.statusDot);
@@ -130,7 +151,11 @@ public class Camera extends Fragment {
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
                     if (isGranted) {
-                        takePictureLauncher.launch(null);
+                        if (pendingFeatureCameraCapture) {
+                            featureCameraLauncher.launch(null);
+                        } else {
+                            takePictureLauncher.launch(null);
+                        }
                     } else {
                         Toast.makeText(requireContext(), "Permission denied", Toast.LENGTH_SHORT).show();
                     }
@@ -147,6 +172,26 @@ public class Camera extends Fragment {
 
                     lastOriginalImage = image;
                     runLocalClassification(image);
+                }
+        );
+
+        mainImagePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    if (uri == null) {
+                        Toast.makeText(requireContext(), "No image selected", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    Bitmap bitmap = loadBitmapFromUri(uri);
+
+                    if (bitmap == null) {
+                        Toast.makeText(requireContext(), "Couldn't load that image, please try another", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    lastOriginalImage = bitmap;
+                    runLocalClassification(bitmap);
                 }
         );
 
@@ -170,7 +215,22 @@ public class Camera extends Fragment {
                 }
         );
 
-        btnOpenCamera.setOnClickListener(v -> showScanTypeDialog());
+        featureCameraLauncher = registerForActivityResult(
+                new ActivityResultContracts.TakePicturePreview(),
+                image -> {
+                    if (image == null) {
+                        Toast.makeText(requireContext(), "No image captured, skipping this feature", Toast.LENGTH_SHORT).show();
+                    } else {
+                        featureImages.add(image);
+                    }
+
+                    currentFeatureIndex++;
+                    promptNextFeatureOrRun();
+                }
+        );
+
+        btnOpenCamera.setOnClickListener(v -> openCamera());
+        btnUploadPhoto.setOnClickListener(v -> mainImagePickerLauncher.launch("image/*"));
 
         setupConnectivityMonitoring();
 
@@ -302,6 +362,28 @@ public class Camera extends Fragment {
         return (int) (dp * getResources().getDisplayMetrics().density);
     }
 
+    /**
+     * Makes any http/https URLs in an AlertDialog's message clickable, and
+     * justifies the body text. Must be called AFTER dialog.show(), since
+     * the message TextView doesn't exist until the dialog is actually
+     * inflated.
+     */
+    private void styleDialogMessage(AlertDialog dialog) {
+
+        TextView messageView = dialog.findViewById(android.R.id.message);
+
+        if (messageView == null) {
+            return;
+        }
+
+        Linkify.addLinks(messageView, Linkify.WEB_URLS);
+        messageView.setMovementMethod(LinkMovementMethod.getInstance());
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            messageView.setJustificationMode(LineBreaker.JUSTIFICATION_MODE_INTER_WORD);
+        }
+    }
+
     private void setupConnectivityMonitoring() {
 
         connectivityManager = (ConnectivityManager)
@@ -416,27 +498,9 @@ public class Camera extends Fragment {
         yourRabbitsRow = null;
     }
 
-    private void showScanTypeDialog() {
-
-        String[] options = {
-                "Breed",
-                "Disease"
-        };
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle("What do you want to scan?")
-                .setItems(options, (dialog, which) -> {
-
-                    currentMode = which == 0
-                            ? "BREED"
-                            : "DISEASE";
-
-                    openCamera();
-                })
-                .show();
-    }
-
     private void openCamera() {
+
+        pendingFeatureCameraCapture = false;
 
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
@@ -444,6 +508,28 @@ public class Camera extends Fragment {
         ) == PackageManager.PERMISSION_GRANTED) {
 
             takePictureLauncher.launch(null);
+
+        } else {
+
+            permissionLauncher.launch(Manifest.permission.CAMERA);
+        }
+    }
+
+    /**
+     * Same as openCamera(), but resumes the per-feature close-up capture
+     * flow instead of the main scan flow once a photo is taken (or
+     * permission is granted).
+     */
+    private void openCameraForFeature() {
+
+        pendingFeatureCameraCapture = true;
+
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED) {
+
+            featureCameraLauncher.launch(null);
 
         } else {
 
@@ -467,6 +553,13 @@ public class Camera extends Fragment {
         }
     }
 
+    /**
+     * Runs both the breed classifier and the disease classifier on the
+     * same photo and reports both results together. The breed model's
+     * confidence is used as the gate for "is there actually a rabbit in
+     * this photo" — if that's too low we don't bother reporting disease
+     * either, since we can't trust that we're looking at a rabbit at all.
+     */
     private void runLocalClassification(Bitmap image) {
 
         Bitmap processedImage =
@@ -495,103 +588,113 @@ public class Camera extends Fragment {
 
         try {
 
-            ImageClassifier.ImageClassifierOptions options =
+            // --- Breed classification (also gates rabbit presence) ---
+            ImageClassifier.ImageClassifierOptions breedOptions =
                     ImageClassifier.ImageClassifierOptions.builder()
                             .setBaseOptions(BaseOptions.builder().build())
                             .setMaxResults(1)
-                            .setScoreThreshold(0.99f)
+                            .setScoreThreshold(0.01f)
                             .build();
 
-            String modelFile =
-                    currentMode.equals("BREED")
-                            ? "model.tflite"
-                            : "diseasemodel.tflite";
-
-            ImageClassifier classifier =
+            ImageClassifier breedClassifier =
                     ImageClassifier.createFromFileAndOptions(
                             requireContext(),
-                            modelFile,
-                            options
+                            "model.tflite",
+                            breedOptions
                     );
 
-            List<Classifications> results =
-                    classifier.classify(
+            List<Classifications> breedResults =
+                    breedClassifier.classify(
                             TensorImage.fromBitmap(processedImage)
                     );
 
-            if (results == null
-                    || results.isEmpty()
-                    || results.get(0).getCategories().isEmpty()) {
+            if (breedResults == null
+                    || breedResults.isEmpty()
+                    || breedResults.get(0).getCategories().isEmpty()) {
 
                 showNoRabbitDetectedDialog();
                 return;
             }
 
-            Classifications classification =
-                    results.get(0);
+            Classifications breedClassification = breedResults.get(0);
 
-            float confidence =
-                    classification
-                            .getCategories()
-                            .get(0)
-                            .getScore();
+            float breedConfidence =
+                    breedClassification.getCategories().get(0).getScore();
 
-            int index =
-                    classification
-                            .getCategories()
-                            .get(0)
-                            .getIndex();
+            int breedIndex =
+                    breedClassification.getCategories().get(0).getIndex();
 
-            if (currentMode.equals("BREED")) {
-                if (confidence < 0.95f) {
-                    showNoRabbitDetectedDialog();
-                    return;
-                }
-            } else {
-                if (confidence < 0.95f) {
-                    showNoRabbitDetectedDialog();
-                    return;
-                }
-            }
-
-
-            String label;
-
-            if (currentMode.equals("BREED")) {
-
-                label =
-                        (index >= 0 && index < breedLabels.length)
-                                ? breedLabels[index]
-                                : "Unknown";
-
-            } else {
-
-                label =
-                        (index >= 0 && index < diseaseLabels.length)
-                                ? diseaseLabels[index]
-                                : "Unknown";
-            }
-
-            if (label.equals("Unknown")) {
+            if (breedConfidence < RABBIT_PRESENCE_THRESHOLD) {
                 showNoRabbitDetectedDialog();
                 return;
             }
 
-            String info =
-                    currentMode.equals("BREED")
-                            ? getCareInfo(label)
-                            : getDiseaseInfo(label);
+            String breedLabel =
+                    (breedIndex >= 0 && breedIndex < breedLabels.length)
+                            ? breedLabels[breedIndex]
+                            : "Unknown";
 
-            String title =
-                    currentMode.equals("BREED")
-                            ? "Detected Breed"
-                            : "Detected Disease";
+            if (breedLabel.equals("Unknown")) {
+                showNoRabbitDetectedDialog();
+                return;
+            }
 
-            showResultDialog(
-                    title,
-                    label,
-                    info
-            );
+            // --- Disease classification (informational only) ---
+            String diseaseLabel = NO_ILLNESS_LABEL;
+
+            try {
+
+                ImageClassifier.ImageClassifierOptions diseaseOptions =
+                        ImageClassifier.ImageClassifierOptions.builder()
+                                .setBaseOptions(BaseOptions.builder().build())
+                                .setMaxResults(1)
+                                .setScoreThreshold(0.01f)
+                                .build();
+
+                ImageClassifier diseaseClassifier =
+                        ImageClassifier.createFromFileAndOptions(
+                                requireContext(),
+                                "diseasemodel.tflite",
+                                diseaseOptions
+                        );
+
+                List<Classifications> diseaseResults =
+                        diseaseClassifier.classify(
+                                TensorImage.fromBitmap(processedImage)
+                        );
+
+                if (diseaseResults != null
+                        && !diseaseResults.isEmpty()
+                        && !diseaseResults.get(0).getCategories().isEmpty()) {
+
+                    Classifications diseaseClassification = diseaseResults.get(0);
+
+                    float diseaseConfidence =
+                            diseaseClassification.getCategories().get(0).getScore();
+
+                    int diseaseIndex =
+                            diseaseClassification.getCategories().get(0).getIndex();
+
+                    if (diseaseConfidence >= DISEASE_REPORT_THRESHOLD
+                            && diseaseIndex >= 0
+                            && diseaseIndex < diseaseLabels.length) {
+
+                        diseaseLabel = diseaseLabels[diseaseIndex];
+                    }
+                }
+
+            } catch (Exception e) {
+                Log.e("Camera", "Disease classification failed", e);
+            }
+
+            String careInfo = getCareInfo(breedLabel);
+
+            String diseaseInfo =
+                    diseaseLabel.equals(NO_ILLNESS_LABEL)
+                            ? ""
+                            : getDiseaseInfo(diseaseLabel);
+
+            showResultDialog(breedLabel, diseaseLabel, careInfo, diseaseInfo);
 
         } catch (Exception e) {
 
@@ -607,37 +710,52 @@ public class Camera extends Fragment {
 
     private void showNoRabbitDetectedDialog() {
 
-        new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setTitle("No Rabbit Detected")
                 .setMessage(
-                        "No rabbit could be detected in this picture. Please take another picture with the rabbit clearly visible."
+                        "No rabbit could be detected in this picture. Please take or choose another picture with the rabbit clearly visible."
                 )
                 .setPositiveButton(
                         "Take Picture Again",
-                        (dialog, which) -> openCamera()
+                        (d, which) -> openCamera()
                 )
                 .setNegativeButton(
                         "Cancel",
                         null
                 )
                 .show();
+
+        styleDialogMessage(dialog);
     }
 
     private void showResultDialog(
-            String title,
-            String label,
-            String info
+            String breedLabel,
+            String diseaseLabel,
+            String careInfo,
+            String diseaseInfo
     ) {
 
-        new AlertDialog.Builder(requireContext())
-                .setTitle(title)
-                .setMessage(label + "\n\n" + info)
+        StringBuilder message = new StringBuilder();
+
+        message.append("Breed: ").append(breedLabel).append("\n");
+        message.append("Health: ").append(diseaseLabel).append("\n\n");
+        message.append(careInfo);
+
+        if (!diseaseInfo.isEmpty()) {
+            message.append("\n\n").append(diseaseInfo);
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle("Scan Results")
+                .setMessage(message.toString())
                 .setPositiveButton("OK", null)
                 .setNeutralButton(
-                        "Want better result with %?",
-                        (dialog, which) -> startFeatureCaptureFlow()
+                        "Improve with Gemini",
+                        (d, which) -> startFeatureCaptureFlow()
                 )
                 .show();
+
+        styleDialogMessage(dialog);
     }
 
     private void startFeatureCaptureFlow() {
@@ -663,9 +781,13 @@ public class Camera extends Fragment {
                     )
                     .setCancelable(false)
                     .setPositiveButton(
-                            "Choose photo",
+                            "Choose Photo",
                             (dialog, which) ->
                                     featurePickerLauncher.launch("image/*")
+                    )
+                    .setNeutralButton(
+                            "Take Picture",
+                            (dialog, which) -> openCameraForFeature()
                     )
                     .setNegativeButton(
                             "Skip",
@@ -683,6 +805,11 @@ public class Camera extends Fragment {
         }
     }
 
+    /**
+     * Sends the original photo plus any feature close-ups to Gemini and
+     * asks it to identify BOTH the breed and any disease/condition in a
+     * single combined response.
+     */
     private void runGeminiRefinement() {
 
         if (lastOriginalImage == null) {
@@ -712,46 +839,40 @@ public class Camera extends Fragment {
         GenerativeModelFutures model =
                 GenerativeModelFutures.from(firebaseAI);
 
-        boolean isBreedMode =
-                currentMode.equals("BREED");
+        String breedList =
+                String.join(", ", breedLabels);
 
-        String[] categories =
-                isBreedMode
-                        ? breedLabels
-                        : diseaseLabels;
+        String diseaseList =
+                String.join(", ", diseaseLabels) + ", Healthy";
 
-        String categoryList =
-                String.join(", ", categories);
-
-        String basePrompt;
-
-        if (isBreedMode) {
-
-            basePrompt =
-                    "You are a rabbit breed expert. Analyze the overall photo plus the close-up feature photos "
-                            + "provided (each labeled) to identify the rabbit's breed as precisely as possible. "
-                            + "If it looks like a mix, estimate a percentage breakdown across these possible breeds: "
-                            + categoryList
-                            + ". Also write a short recommended care plan for this rabbit covering diet, "
-                            + "housing/exercise, and any breed-specific notes, based on the identified breed. "
-                            + "Respond ONLY in JSON, no extra text, in this exact format: "
-                            + "{\"label\": \"Holland\", \"confidences\": {\"Holland\": 80, \"California\": 10, "
-                            + "\"New Zealand\": 5, \"Lionhead\": 5}, \"care\": \"short recommended care plan here\"}";
-
-        } else {
-
-            basePrompt =
-                    "You are a rabbit health expert. Analyze the overall photo plus the close-up feature photos "
-                            + "provided (each labeled) to identify any disease or condition as precisely as possible. "
-                            + "Estimate a percentage likelihood across these possible conditions: "
-                            + categoryList
-                            + ". Also write short recommended care guidance for the identified condition, "
-                            + "covering immediate at-home steps, whether a vet visit is needed, and any warning signs to "
-                            + "watch for. This is general guidance only, not a substitute for veterinary diagnosis. "
-                            + "Respond ONLY in JSON, no extra text, in this exact format: "
-                            + "{\"label\": \"Mites\", \"confidences\": {\"Myxomatosis\": 5, \"Mites\": 80, "
-                            + "\"Malocclusion\": 5, \"Pasteurellosis\": 10}, \"care\": \"short recommended care guidance here\"}";
-        }
+        String basePrompt =
+                "You are both a rabbit breed expert and a rabbit health expert. Analyze the overall photo plus "
+                        + "the close-up feature photos provided (each labeled) to identify BOTH the rabbit's breed "
+                        + "AND any visible disease or health condition in a single pass.\n\n"
+                        + "For the breed, evaluate the rabbit against ALL recognized domestic rabbit breeds. "
+                        + "Return a percentage confidence for every breed that is reasonably plausible based on the photos. "
+                        + "Do not use categories such as \"Other\", \"Unknown\", \"Unidentified\", or \"Mixed\" as a breed. "
+                        + "If the rabbit does not match the provided breed list, identify the actual rabbit breed that it "
+                        + "most closely resembles and provide that breed's name. "
+                        + "If the rabbit appears to be a mix, provide the most likely actual breeds contributing to the mix "
+                        + "and assign estimated percentages to each. "
+                        + "Every breed name must be the name of an actual recognized rabbit breed. "
+                        + "The breed confidence percentages must add up to exactly 100.\n\n"
+                        + "For health, evaluate the rabbit against ALL known rabbit diseases and health conditions that "
+                        + "could potentially be identified from visible photographic signs. "
+                        + "Return a percentage likelihood for every relevant disease or health condition. "
+                        + "Do not use \"Other\" or \"Unknown\" as a disease category. "
+                        + "If there are no visible signs of illness, give \"Healthy\" the highest percentage. "
+                        + "The disease confidence percentages must add up to exactly 100.\n\n"
+                        + "Also write one short combined care plan covering diet, housing/exercise, breed-specific notes, "
+                        + "and any health guidance or warning signs based on what you found. "
+                        + "This is general guidance only, not a substitute for veterinary diagnosis.\n\n"
+                        + "Respond ONLY in JSON, no extra text, in this exact format: "
+                        + "{\"breed\": \"Holland Lop\", \"breed_confidences\": {\"Holland Lop\": 80, "
+                        + "\"Mini Lop\": 10, \"Netherland Dwarf\": 5, \"Lionhead\": 5}, "
+                        + "\"disease\": \"Healthy\", \"disease_confidences\": {\"Healthy\": 80, "
+                        + "\"Mites\": 5, \"Malocclusion\": 5, \"Pasteurellosis\": 5, \"Myxomatosis\": 5}, "
+                        + "\"care\": \"short combined care plan here\"}";;
 
         Content.Builder contentBuilder =
                 new Content.Builder()
@@ -835,14 +956,23 @@ public class Camera extends Fragment {
                 JSONObject obj =
                         new JSONObject(json);
 
-                String label =
+                String breedLabel =
                         obj.optString(
-                                "label",
+                                "breed",
                                 "Unknown"
                         );
 
-                JSONObject confidences =
-                        obj.optJSONObject("confidences");
+                JSONObject breedConfidences =
+                        obj.optJSONObject("breed_confidences");
+
+                String diseaseLabel =
+                        obj.optString(
+                                "disease",
+                                NO_ILLNESS_LABEL
+                        );
+
+                JSONObject diseaseConfidences =
+                        obj.optJSONObject("disease_confidences");
 
                 String care =
                         obj.optString(
@@ -850,9 +980,9 @@ public class Camera extends Fragment {
                                 ""
                         ).trim();
 
-                if (label.equalsIgnoreCase("Unknown")
-                        || label.equalsIgnoreCase("No rabbit")
-                        || label.equalsIgnoreCase("No rabbit detected")) {
+                if (breedLabel.equalsIgnoreCase("Unknown")
+                        || breedLabel.equalsIgnoreCase("No rabbit")
+                        || breedLabel.equalsIgnoreCase("No rabbit detected")) {
 
                     showNoRabbitDetectedDialog();
                     return;
@@ -861,30 +991,18 @@ public class Camera extends Fragment {
                 StringBuilder message =
                         new StringBuilder();
 
-                message.append("Best match: ")
-                        .append(label)
+                message.append("Breed: ")
+                        .append(breedLabel)
                         .append("\n\n");
 
-                if (confidences != null) {
+                appendConfidences(message, breedConfidences);
 
-                    java.util.Iterator<String> keys =
-                            confidences.keys();
+                message.append("\nHealth: ")
+                        .append(diseaseLabel)
+                        .append("\n\n");
 
-                    while (keys.hasNext()) {
-
-                        String key =
-                                keys.next();
-
-                        message.append(key)
-                                .append(": ")
-                                .append(
-                                        confidences.optInt(
-                                                key,
-                                                0
-                                        )
-                                )
-                                .append("%\n");
-                    }
+                if (!diseaseLabel.equalsIgnoreCase("Healthy")) {
+                    appendConfidences(message, diseaseConfidences);
                 }
 
                 if (!care.isEmpty()) {
@@ -896,16 +1014,13 @@ public class Camera extends Fragment {
                             .append("\n");
                 }
 
-                String title =
-                        currentMode.equals("BREED")
-                                ? "Gemini Breed Estimate"
-                                : "Gemini Health Estimate";
-
-                new AlertDialog.Builder(requireContext())
-                        .setTitle(title)
+                AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                        .setTitle("Gemini Breed & Health Estimate")
                         .setMessage(message.toString())
                         .setPositiveButton("OK", null)
                         .show();
+
+                styleDialogMessage(dialog);
 
             } catch (JSONException e) {
 
@@ -915,13 +1030,41 @@ public class Camera extends Fragment {
                         e
                 );
 
-                new AlertDialog.Builder(requireContext())
+                AlertDialog fallbackDialog = new AlertDialog.Builder(requireContext())
                         .setTitle("Gemini Result")
                         .setMessage(rawText)
                         .setPositiveButton("OK", null)
                         .show();
+
+                styleDialogMessage(fallbackDialog);
             }
         });
+    }
+
+    private void appendConfidences(StringBuilder message, JSONObject confidences) {
+
+        if (confidences == null) {
+            return;
+        }
+
+        java.util.Iterator<String> keys =
+                confidences.keys();
+
+        while (keys.hasNext()) {
+
+            String key =
+                    keys.next();
+
+            message.append(key)
+                    .append(": ")
+                    .append(
+                            confidences.optInt(
+                                    key,
+                                    0
+                            )
+                    )
+                    .append("%\n");
+        }
     }
 
     private String extractJson(String text) {
@@ -956,38 +1099,90 @@ public class Camera extends Fragment {
         return trimmed;
     }
 
+    /**
+     * Breed-specific care summary. Figures are drawn from Merck Veterinary
+     * Manual, PetMD, Animal Humane Society, and the Californian/Holland Lop
+     * breed guides — general portion rule of thumb is about 1/4 cup of
+     * pellets per 4-5 lb of body weight, with hay making up the bulk of
+     * the diet.
+     */
     private String getCareInfo(String breed) {
 
         switch (breed.toLowerCase()) {
 
             case "new zealand":
 
-                return " Breed: New Zealand\n\n Diet:\n- Unlimited hay\n- Pellets\n- Vegetables\n\n Care:\n- Spacious cage\n- Daily exercise\n\n️ Notes:\n- Monitor weight\n\n"
+                return "Breed: New Zealand (9-12 lb, lifespan 5-8 yrs)\n\n"
+                        + "Diet:\n"
+                        + "- Hay: unlimited, at least 80% of daily diet\n"
+                        + "- Leafy greens: ~1 cup per 2-3 lb of body weight/day (rotate kale, spinach, parsley, romaine, dandelion greens, arugula, bok choy)\n"
+                        + "- Pellets: ~1/4 cup per 4-5 lb of body weight/day\n"
+                        + "- Fruit: only occasionally, 1-2 tbsp per 5 lb, 1-2x/week (too much can cause obesity or GI stasis)\n\n"
+                        + "Care:\n"
+                        + "- Spacious cage/enclosure with daily exercise time\n"
+                        + "- Fresh water available at all times\n\n"
+                        + "Notes:\n"
+                        + "- Larger breed — monitor weight to avoid obesity\n\n"
                         + "Video Guide: \n"
                         + "https://youtu.be/FbibvbYxIzw?si=GPenxib7t4yb1Ko2";
 
             case "lionhead":
 
-                return " Breed: Lionhead\n\n Diet:\n- Hay + greens\n\n Care:\n- Grooming required\n\n️ Notes:\n- Avoid hair ingestion\n\n"
+                return "Breed: Lionhead (2.5-3.75 lb, lifespan 7-9 yrs)\n\n"
+                        + "Diet:\n"
+                        + "- Hay: unlimited fresh Timothy hay, roughly their own body weight worth per day\n"
+                        + "- Greens: ~1 cup per 2 lb of body weight/day (arugula, parsley, mint, basil, cilantro, spinach, romaine — avoid iceberg lettuce, little nutritional value)\n"
+                        + "- Small amounts of broccoli, bell pepper, squash, kale, zucchini, Brussels sprouts, or carrot tops; carrots themselves sparingly (high in carbs)\n"
+                        + "- Pellets: about 1/8 cup/day for an adult (smaller breed than average)\n\n"
+                        + "Care:\n"
+                        + "- Regular grooming required for the long mane fur\n\n"
+                        + "Notes:\n"
+                        + "- Watch for hair ingestion/GI blockage from grooming\n\n"
                         + "Video Guide: \n"
                         + "https://youtu.be/57y91glfDGc?si=TGHYF2oIh40aiCxw";
 
             case "holland":
             case "holland lop":
 
-                return " Breed: Holland Lop\n\n Diet:\n- Hay + controlled pellets\n\n Care:\n- Ear cleaning\n\n️ Notes:\n- Avoid obesity\n\n"
+                return "Breed: Holland Lop (up to 4 lb, lifespan 7-10 yrs)\n\n"
+                        + "Diet:\n"
+                        + "- Hay: unlimited amounts, majority of diet\n"
+                        + "- Fresh greens: smaller amount daily\n"
+                        + "- Pellets: ~1/4 cup per 4-5 lb of body weight/day\n\n"
+                        + "Care:\n"
+                        + "- Check and clean ears regularly (lop ears are prone to wax buildup/infection)\n\n"
+                        + "Notes:\n"
+                        + "- Small breed — avoid overfeeding pellets to prevent obesity\n\n"
                         + "Video Guide: \n"
                         + "https://youtu.be/HfLwpvfjuuI?si=dXG-fEA-BqKQ5mIJ";
 
             case "california":
 
-                return " Breed: California\n\n Diet:\n- Balanced diet\n\n Care:\n- Cool environment\n\n Notes:\n- Check skin regularly\n\n"
+                return "Breed: Californian (2.5-4 kg)\n\n"
+                        + "Diet:\n"
+                        + "- Hay (timothy, orchard grass, or meadow hay): 80-85% of daily diet\n"
+                        + "- Pellets: ~1/4 cup per 5 lb of body weight/day for adults; free-choice for growing/nursing rabbits. Choose high-fiber, balanced-protein pellets with minimal fillers\n"
+                        + "- Fresh greens for extra vitamins: romaine lettuce, mustard greens, cilantro, basil, dandelion greens\n\n"
+                        + "Care:\n"
+                        + "- Keep in a cool environment — dense coat is prone to overheating\n\n"
+                        + "Notes:\n"
+                        + "- Check skin/coat regularly; can be anxious or easily startled, males may show aggression\n\n"
                         + "Video Guide: \n"
                         + "https://youtu.be/3fJJRRsDwUo?si=hKjR826zbbiKWGFk";
 
             default:
 
-                return " General Rabbit Care\n\n Diet:\n- Hay + vegetables\n\n Care:\n- Clean cage\n\nNotes:\n- Fresh water always";
+                return "General Rabbit Care\n\n"
+                        + "Diet:\n"
+                        + "- Timothy hay freely available at all times (ad libitum)\n"
+                        + "- Pellets: ~1/4 cup per 5 lb of body weight/day, controlled portions to prevent obesity\n"
+                        + "- Fresh, clean water always available — rabbits drink about 120 mL per kg of body weight/day (roughly double a cat or dog of similar size); an open bowl may get more use than a sipper bottle\n"
+                        + "- Keep dietary calcium around 0.4-0.5% for adult non-breeding rabbits; avoid diets based mainly on alfalfa meal, which raises the risk of kidney/urinary calcium problems\n\n"
+                        + "Foods & plants to avoid:\n"
+                        + "- Aloe, azalea, calla lily, lily of the valley, philodendron, corn plant, carnation\n"
+                        + "- Apple seeds, raw beans, sweet potato, rhubarb leaves, potato eyes/shoots/green parts, chocolate\n\n"
+                        + "Notes:\n"
+                        + "- Loss of appetite can be a sign of dehydration or illness — seek veterinary care if a rabbit stops eating";
         }
     }
 
@@ -997,25 +1192,25 @@ public class Camera extends Fragment {
 
             case "myxomatosis":
 
-                return " Myxomatosis\n️ Severe viral disease\n Vet required\n\n"
+                return " Myxomatosis\n️ Severe viral disease\n Vet required\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/RUezkUetEEA?si=gcsRr-tNhlvpU7sg";
 
             case "mites":
 
-                return " Mites\n️ Skin irritation\n Treat with ivermectin\n\n"
+                return " Mites\n️ Skin irritation\n Treat with ivermectin\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/iQyPn2VL70s?si=EAnvWMapiA8YgJRW";
 
             case "malocclusion":
 
-                return " Malocclusion\n️ Teeth problem\n Needs dental care\n\n"
+                return " Malocclusion\n️ Teeth problem\n Needs dental care\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/2F328Q38uJc?si=PQNXStwEciaECc8h";
 
             case "pasteurellosis":
 
-                return " Pasteurellosis\n⚠ Respiratory infection\n Antibiotics required\n\n"
+                return " Pasteurellosis\n⚠ Respiratory infection\n Antibiotics required\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/Uxj0VIqC83Q?si=J5OugchFPDFVkepC";
         }

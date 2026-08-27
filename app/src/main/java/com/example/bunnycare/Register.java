@@ -22,8 +22,9 @@ import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
 
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.AuthCredential;
@@ -50,7 +51,6 @@ public class Register extends AppCompatActivity {
 
     private ProgressBar progressBar;
 
-    private TextView textLogin;
     private TextView btnLoginTab;
     private TextView btnCreateAccount;
 
@@ -85,7 +85,6 @@ public class Register extends AppCompatActivity {
 
         progressBar = findViewById(R.id.progressBar);
 
-        textLogin = findViewById(R.id.textLogin);
         btnLoginTab = findViewById(R.id.btnLoginTab);
         btnCreateAccount = findViewById(R.id.btnCreateAccount);
 
@@ -97,37 +96,13 @@ public class Register extends AppCompatActivity {
 
         if (btnLoginTab != null) {
             btnLoginTab.setOnClickListener(v -> {
-
-                Intent intent = new Intent(
-                        Register.this,
-                        Login.class
-                );
-
-                startActivity(intent);
-                finish();
-            });
-        }
-
-        if (btnCreateAccount != null) {
-            btnCreateAccount.setOnClickListener(v -> {
-            });
-        }
-
-        if (textLogin != null) {
-            textLogin.setOnClickListener(v -> {
-
-                Intent intent = new Intent(
-                        Register.this,
-                        Login.class
-                );
-
+                Intent intent = new Intent(Register.this, Login.class);
                 startActivity(intent);
                 finish();
             });
         }
 
         // ----- Google Sign-Up setup (Credential Manager) -----
-
         if (btnGoogleSignUp != null) {
             btnGoogleSignUp.setOnClickListener(v -> signInWithGoogle());
         }
@@ -137,14 +112,17 @@ public class Register extends AppCompatActivity {
 
         showLoading(true);
 
-        GetSignInWithGoogleOption signInWithGoogleOption =
-                new GetSignInWithGoogleOption.Builder(
-                        getString(R.string.default_web_client_id)
-                ).build();
+        // filterByAuthorizedAccounts(false) so brand-new Google users can sign up too,
+        // not just accounts that have used this app before.
+        GetGoogleIdOption googleIdOption =
+                new GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(getString(R.string.default_web_client_id))
+                        .build();
 
         GetCredentialRequest request =
                 new GetCredentialRequest.Builder()
-                        .addCredentialOption(signInWithGoogleOption)
+                        .addCredentialOption(googleIdOption)
                         .build();
 
         cancellationSignal = new CancellationSignal();
@@ -168,17 +146,21 @@ public class Register extends AppCompatActivity {
 
                         showLoading(false);
 
-                        android.util.Log.e(
-                                "CredentialManager",
-                                "Google Sign-Up failed",
-                                e
-                        );
+                        android.util.Log.e("CredentialManager", "Google Sign-Up failed", e);
 
-                        Toast.makeText(
-                                Register.this,
-                                "Google Sign-Up Failed: " + e.getMessage(),
-                                Toast.LENGTH_SHORT
-                        ).show();
+                        if (e instanceof NoCredentialException) {
+                            Toast.makeText(
+                                    Register.this,
+                                    "No Google account found on this device. Please add one in Settings.",
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        } else {
+                            Toast.makeText(
+                                    Register.this,
+                                    "Google Sign-Up failed: " + e.getMessage(),
+                                    Toast.LENGTH_SHORT
+                            ).show();
+                        }
                     }
                 }
         );
@@ -193,170 +175,92 @@ public class Register extends AppCompatActivity {
                 .equals(((CustomCredential) credential).getType())) {
 
             try {
-
                 GoogleIdTokenCredential googleIdTokenCredential =
-                        GoogleIdTokenCredential.createFrom(
-                                ((CustomCredential) credential).getData()
-                        );
+                        GoogleIdTokenCredential.createFrom(((CustomCredential) credential).getData());
 
                 firebaseAuthWithGoogle(googleIdTokenCredential);
 
             } catch (Exception e) {
-
                 showLoading(false);
-
-                android.util.Log.e(
-                        "CredentialManager",
-                        "Failed to parse Google ID token",
-                        e
-                );
-
-                Toast.makeText(
-                        Register.this,
-                        "Google Sign-Up Failed",
-                        Toast.LENGTH_SHORT
-                ).show();
+                android.util.Log.e("CredentialManager", "Failed to parse Google ID token", e);
+                Toast.makeText(Register.this, "Google Sign-Up Failed", Toast.LENGTH_SHORT).show();
             }
 
         } else {
-
             showLoading(false);
-
-            Toast.makeText(
-                    Register.this,
-                    "Unexpected credential type",
-                    Toast.LENGTH_SHORT
-            ).show();
+            Toast.makeText(Register.this, "Unexpected credential type", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void firebaseAuthWithGoogle(
-            GoogleIdTokenCredential googleIdTokenCredential
-    ) {
+    private void firebaseAuthWithGoogle(GoogleIdTokenCredential googleIdTokenCredential) {
 
         AuthCredential firebaseCredential =
-                GoogleAuthProvider.getCredential(
-                        googleIdTokenCredential.getIdToken(),
-                        null
-                );
+                GoogleAuthProvider.getCredential(googleIdTokenCredential.getIdToken(), null);
 
         mAuth.signInWithCredential(firebaseCredential)
                 .addOnCompleteListener(this, task -> {
 
                     if (task.isSuccessful()) {
 
-                        FirebaseUser user =
-                                mAuth.getCurrentUser();
+                        FirebaseUser user = mAuth.getCurrentUser();
 
                         if (user != null) {
 
                             boolean isNewUser =
-                                    task.getResult()
-                                            .getAdditionalUserInfo()
-                                            .isNewUser();
+                                    task.getResult().getAdditionalUserInfo() != null
+                                            && task.getResult().getAdditionalUserInfo().isNewUser();
 
                             String uid = user.getUid();
 
                             if (isNewUser) {
 
-                                Map<String, Object> userMap =
-                                        new HashMap<>();
-
-                                userMap.put(
-                                        "firstName",
-                                        googleIdTokenCredential.getGivenName()
-                                );
-
-                                userMap.put(
-                                        "lastName",
-                                        googleIdTokenCredential.getFamilyName()
-                                );
-
-                                userMap.put(
-                                        "username",
-                                        googleIdTokenCredential.getDisplayName()
-                                );
-
-                                userMap.put(
-                                        "email",
-                                        googleIdTokenCredential.getId()
-                                );
-
-                                userMap.put(
-                                        "verified",
-                                        true
-                                );
+                                Map<String, Object> userMap = new HashMap<>();
+                                userMap.put("firstName", googleIdTokenCredential.getGivenName());
+                                userMap.put("lastName", googleIdTokenCredential.getFamilyName());
+                                userMap.put("username", googleIdTokenCredential.getDisplayName());
+                                userMap.put("email", googleIdTokenCredential.getId());
+                                userMap.put("verified", true);
 
                                 db.collection("users")
                                         .document(uid)
                                         .set(userMap)
-                                        .addOnCompleteListener(
-                                                saveTask -> {
-
-                                                    showLoading(false);
-
-                                                    openHome();
-                                                }
-                                        );
+                                        .addOnCompleteListener(saveTask -> {
+                                            showLoading(false);
+                                            openHome();
+                                        });
 
                             } else {
-
                                 showLoading(false);
-
                                 openHome();
                             }
 
                         } else {
-
                             showLoading(false);
-
-                            Toast.makeText(
-                                    Register.this,
-                                    "Unable to get Google account",
-                                    Toast.LENGTH_LONG
-                            ).show();
+                            Toast.makeText(Register.this, "Unable to get Google account", Toast.LENGTH_LONG).show();
                         }
 
                     } else {
 
                         showLoading(false);
 
-                        String message =
-                                "Google Authentication Failed";
-
+                        String message = "Google Authentication Failed";
                         if (task.getException() != null) {
-                            message =
-                                    task.getException().getMessage();
+                            message = task.getException().getMessage();
                         }
 
-                        Toast.makeText(
-                                Register.this,
-                                message,
-                                Toast.LENGTH_LONG
-                        ).show();
+                        Toast.makeText(Register.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
     private void validateInputs() {
 
-        String fName =
-                firstName.getText().toString().trim();
-
-        String lName =
-                lastName.getText().toString().trim();
-
-        String user =
-                username.getText().toString().trim();
-
-        String mail =
-                email.getText().toString().trim();
-
-        String pass =
-                password.getText().toString().trim();
-
-        String rePass =
-                repassword.getText().toString().trim();
+        String fName = firstName.getText().toString().trim();
+        String lName = lastName.getText().toString().trim();
+        String user = username.getText().toString().trim();
+        String mail = email.getText().toString().trim();
+        String pass = password.getText().toString().trim();
+        String rePass = repassword.getText().toString().trim();
 
         firstName.setError(null);
         lastName.setError(null);
@@ -366,140 +270,74 @@ public class Register extends AppCompatActivity {
         repassword.setError(null);
 
         if (TextUtils.isEmpty(fName)) {
-
-            firstName.setError(
-                    "Enter your first name"
-            );
-
+            firstName.setError("Enter your first name");
             firstName.requestFocus();
-
             return;
         }
 
         if (TextUtils.isEmpty(lName)) {
-
-            lastName.setError(
-                    "Enter your last name"
-            );
-
+            lastName.setError("Enter your last name");
             lastName.requestFocus();
-
             return;
         }
 
         if (TextUtils.isEmpty(user)) {
-
-            username.setError(
-                    "Enter a username"
-            );
-
+            username.setError("Enter a username");
             username.requestFocus();
-
             return;
         }
 
         if (TextUtils.isEmpty(mail)) {
-
-            email.setError(
-                    "Enter your email"
-            );
-
+            email.setError("Enter your email");
             email.requestFocus();
-
             return;
         }
 
-        if (!Patterns.EMAIL_ADDRESS
-                .matcher(mail)
-                .matches()) {
-
-            email.setError(
-                    "Enter a valid email"
-            );
-
+        if (!Patterns.EMAIL_ADDRESS.matcher(mail).matches()) {
+            email.setError("Enter a valid email");
             email.requestFocus();
-
             return;
         }
 
         if (TextUtils.isEmpty(pass)) {
-
-            password.setError(
-                    "Enter a password"
-            );
-
+            password.setError("Enter a password");
             password.requestFocus();
-
             return;
         }
 
         if (TextUtils.isEmpty(rePass)) {
-
-            repassword.setError(
-                    "Re-enter your password"
-            );
-
+            repassword.setError("Re-enter your password");
             repassword.requestFocus();
-
             return;
         }
 
         if (!pass.equals(rePass)) {
-
-            password.setError(
-                    "Passwords do not match"
-            );
-
-            repassword.setError(
-                    "Passwords do not match"
-            );
-
+            password.setError("Passwords do not match");
+            repassword.setError("Passwords do not match");
             password.requestFocus();
-
             return;
         }
 
-        if (!pass.matches(
-                "^(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{6,}$"
-        )) {
-
-            password.setError(
-                    "6+ chars, 1 uppercase, 1 special char"
-            );
-
+        if (!pass.matches("^(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{6,}$")) {
+            password.setError("6+ chars, 1 uppercase, 1 special char");
             password.requestFocus();
-
             return;
         }
 
         showLoading(true);
 
         db.collection("users")
-                .whereEqualTo("firstName", fName)
-                .whereEqualTo("lastName", lName)
+                .whereEqualTo("username", user)
                 .get()
                 .addOnCompleteListener(task -> {
 
-                    if (task.isSuccessful()
-                            && !task.getResult().isEmpty()) {
-
+                    if (task.isSuccessful() && !task.getResult().isEmpty()) {
                         showLoading(false);
-
-                        Toast.makeText(
-                                Register.this,
-                                "Name already exists",
-                                Toast.LENGTH_LONG
-                        ).show();
-
+                        username.setError("Username already taken");
+                        username.requestFocus();
+                        Toast.makeText(Register.this, "Username already exists", Toast.LENGTH_LONG).show();
                     } else {
-
-                        createAccount(
-                                fName,
-                                lName,
-                                user,
-                                mail,
-                                pass
-                        );
+                        createAccount(fName, lName, user, mail, pass);
                     }
                 });
     }
@@ -512,173 +350,87 @@ public class Register extends AppCompatActivity {
             String passwordValue
     ) {
 
-        mAuth.createUserWithEmailAndPassword(
-                        emailAddress,
-                        passwordValue
-                )
+        mAuth.createUserWithEmailAndPassword(emailAddress, passwordValue)
                 .addOnCompleteListener(task -> {
 
                     if (task.isSuccessful()) {
 
-                        FirebaseUser firebaseUser =
-                                mAuth.getCurrentUser();
+                        FirebaseUser firebaseUser = mAuth.getCurrentUser();
 
                         if (firebaseUser != null) {
 
-                            firebaseUser
-                                    .sendEmailVerification();
+                            firebaseUser.sendEmailVerification();
 
-                            String uid =
-                                    firebaseUser.getUid();
+                            String uid = firebaseUser.getUid();
 
-                            Map<String, Object> userMap =
-                                    new HashMap<>();
-
-                            userMap.put(
-                                    "firstName",
-                                    fName
-                            );
-
-                            userMap.put(
-                                    "lastName",
-                                    lName
-                            );
-
-                            userMap.put(
-                                    "username",
-                                    userName
-                            );
-
-                            userMap.put(
-                                    "email",
-                                    emailAddress
-                            );
-
-                            userMap.put(
-                                    "verified",
-                                    false
-                            );
+                            Map<String, Object> userMap = new HashMap<>();
+                            userMap.put("firstName", fName);
+                            userMap.put("lastName", lName);
+                            userMap.put("username", userName);
+                            userMap.put("email", emailAddress);
+                            userMap.put("verified", false);
 
                             db.collection("users")
                                     .document(uid)
                                     .set(userMap)
-                                    .addOnCompleteListener(
-                                            saveTask -> {
+                                    .addOnCompleteListener(saveTask -> {
 
-                                                showLoading(false);
+                                        showLoading(false);
 
-                                                Toast.makeText(
-                                                        Register.this,
-                                                        "Account created. Check your email for verification.",
-                                                        Toast.LENGTH_LONG
-                                                ).show();
+                                        Toast.makeText(
+                                                Register.this,
+                                                "Account created. Check your email for verification.",
+                                                Toast.LENGTH_LONG
+                                        ).show();
 
-                                                mAuth.signOut();
+                                        mAuth.signOut();
 
-                                                Intent intent =
-                                                        new Intent(
-                                                                Register.this,
-                                                                HomeActivity.class
-                                                        );
-
-                                                intent.addFlags(
-                                                        Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                                                                Intent.FLAG_ACTIVITY_NEW_TASK
-                                                );
-
-                                                startActivity(intent);
-                                                finish();
-                                            }
-                                    );
+                                        Intent intent = new Intent(Register.this, Login.class);
+                                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        startActivity(intent);
+                                        finish();
+                                    });
 
                         } else {
-
                             showLoading(false);
-
-                            Toast.makeText(
-                                    Register.this,
-                                    "Registration failed",
-                                    Toast.LENGTH_LONG
-                            ).show();
+                            Toast.makeText(Register.this, "Registration failed", Toast.LENGTH_LONG).show();
                         }
 
                     } else {
 
                         showLoading(false);
 
-                        String message =
-                                "Registration failed";
-
+                        String message = "Registration failed";
                         if (task.getException() != null) {
-                            message =
-                                    task.getException()
-                                            .getMessage();
+                            message = task.getException().getMessage();
                         }
 
-                        Toast.makeText(
-                                Register.this,
-                                message,
-                                Toast.LENGTH_LONG
-                        ).show();
+                        Toast.makeText(Register.this, message, Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
     private void openHome() {
-
-        Intent intent =
-                new Intent(
-                        Register.this,
-                        HomeActivity.class
-                );
-
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-        );
-
+        Intent intent = new Intent(Register.this, HomeActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
     }
 
     @Override
     protected void onDestroy() {
-
         if (cancellationSignal != null) {
             cancellationSignal.cancel();
         }
-
         super.onDestroy();
     }
 
     private void showLoading(boolean loading) {
 
-        if (progressBar != null) {
-            progressBar.setVisibility(
-                    loading
-                            ? View.VISIBLE
-                            : View.GONE
-            );
-        }
-
-        if (btnSignUp != null) {
-            btnSignUp.setEnabled(!loading);
-        }
-
-        if (btnGoogleSignUp != null) {
-            btnGoogleSignUp.setEnabled(!loading);
-        }
-
-        if (textLogin != null) {
-            textLogin.setEnabled(!loading);
-        }
-
-        if (btnLoginTab != null) {
-            btnLoginTab.setEnabled(!loading);
-        }
-
-        if (btnCreateAccount != null) {
-            btnCreateAccount.setEnabled(!loading);
-        }
+        if (progressBar != null) progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
+        if (btnSignUp != null) btnSignUp.setEnabled(!loading);
+        if (btnGoogleSignUp != null) btnGoogleSignUp.setEnabled(!loading);
+        if (btnLoginTab != null) btnLoginTab.setEnabled(!loading);
+        if (btnCreateAccount != null) btnCreateAccount.setEnabled(!loading);
     }
 }
