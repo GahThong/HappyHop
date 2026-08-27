@@ -112,7 +112,7 @@ public class Login extends AppCompatActivity {
 
         GetGoogleIdOption googleIdOption =
                 new GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(true)
+                        .setFilterByAuthorizedAccounts(false)
                         .setServerClientId("396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com")
                         .build();
 
