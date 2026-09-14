@@ -307,6 +307,10 @@ public class Register extends AppCompatActivity {
                         userMap.put("email", googleEmail);
                         userMap.put("verified", true);
 
+                        // NOTE: Google sign-up doesn't currently reserve a row in
+                        // "usernames" the way email/password sign-up does below.
+                        // If you rely on displayName being unique elsewhere, consider
+                        // applying the same usernames-collection reservation here too.
                         db.collection("users")
                                 .document(uid)
                                 .set(userMap)
@@ -405,47 +409,14 @@ public class Register extends AppCompatActivity {
             return;
         }
 
+        // NOTE: the old "check username uniqueness before creating the account"
+        // step is gone. A collection query filtered by username can't be allowed
+        // by per-uid Firestore rules, so it always failed with PERMISSION_DENIED
+        // regardless of auth state. Uniqueness is now enforced by createAccount()
+        // via a dedicated "usernames" lookup collection (doc ID = username),
+        // checked/reserved right after the auth account is created.
         showLoading(true);
-
-        db.collection("users")
-                .whereEqualTo("username", user)
-                .get()
-                .addOnCompleteListener(task -> {
-
-                    if (task.isSuccessful()) {
-
-                        if (!task.getResult().isEmpty()) {
-                            showLoading(false);
-
-                            username.setError("Username already taken");
-                            username.requestFocus();
-
-                            Toast.makeText(
-                                    Register.this,
-                                    "Username already exists",
-                                    Toast.LENGTH_LONG
-                            ).show();
-
-                        } else {
-                            createAccount(
-                                    fName,
-                                    lName,
-                                    user,
-                                    mail,
-                                    pass
-                            );
-                        }
-
-                    } else {
-                        showLoading(false);
-
-                        Toast.makeText(
-                                Register.this,
-                                "Unable to check username",
-                                Toast.LENGTH_LONG
-                        ).show();
-                    }
-                });
+        createAccount(fName, lName, user, mail, pass);
     }
 
     private void createAccount(
@@ -495,59 +466,109 @@ public class Register extends AppCompatActivity {
                         return;
                     }
 
-                    firebaseUser.sendEmailVerification();
-
                     String uid = firebaseUser.getUid();
 
-                    Map<String, Object> userMap = new HashMap<>();
+                    // Now that we're authenticated, check the "usernames" lookup
+                    // collection (a plain document get() by ID, which Firestore
+                    // rules CAN evaluate — unlike a where() query on "users").
+                    db.collection("usernames")
+                            .document(userName)
+                            .get()
+                            .addOnCompleteListener(checkTask -> {
 
-                    userMap.put("firstName", fName);
-                    userMap.put("lastName", lName);
-                    userMap.put("username", userName);
-                    userMap.put("email", emailAddress);
-                    userMap.put("verified", false);
+                                if (!checkTask.isSuccessful()) {
+                                    showLoading(false);
 
-                    db.collection("users")
-                            .document(uid)
-                            .set(userMap)
-                            .addOnCompleteListener(saveTask -> {
-
-                                showLoading(false);
-
-                                if (saveTask.isSuccessful()) {
-
-                                    Toast.makeText(
-                                            Register.this,
-                                            "Account created. Check your email for verification.",
-                                            Toast.LENGTH_LONG
-                                    ).show();
-
-                                    mAuth.signOut();
-
-                                    Intent intent =
-                                            new Intent(
-                                                    Register.this,
-                                                    Login.class
-                                            );
-
-                                    intent.addFlags(
-                                            Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                                    | Intent.FLAG_ACTIVITY_NEW_TASK
-                                    );
-
-                                    startActivity(intent);
-                                    finish();
-
-                                } else {
-
+                                    firebaseUser.delete();
                                     mAuth.signOut();
 
                                     Toast.makeText(
                                             Register.this,
-                                            "Account created but user data could not be saved",
+                                            "Unable to check username",
                                             Toast.LENGTH_LONG
                                     ).show();
+
+                                    return;
                                 }
+
+                                if (checkTask.getResult() != null
+                                        && checkTask.getResult().exists()) {
+
+                                    showLoading(false);
+
+                                    firebaseUser.delete();
+                                    mAuth.signOut();
+
+                                    username.setError("Username already taken");
+                                    username.requestFocus();
+
+                                    Toast.makeText(
+                                            Register.this,
+                                            "Username already exists",
+                                            Toast.LENGTH_LONG
+                                    ).show();
+
+                                    return;
+                                }
+
+                                firebaseUser.sendEmailVerification();
+
+                                Map<String, Object> userMap = new HashMap<>();
+                                userMap.put("firstName", fName);
+                                userMap.put("lastName", lName);
+                                userMap.put("username", userName);
+                                userMap.put("email", emailAddress);
+                                userMap.put("verified", false);
+
+                                Map<String, Object> usernameMap = new HashMap<>();
+                                usernameMap.put("uid", uid);
+
+                                // Write both docs together so we never end up with
+                                // one saved and not the other.
+                                db.batch()
+                                        .set(db.collection("users").document(uid), userMap)
+                                        .set(db.collection("usernames").document(userName), usernameMap)
+                                        .commit()
+                                        .addOnCompleteListener(saveTask -> {
+
+                                            showLoading(false);
+
+                                            if (saveTask.isSuccessful()) {
+
+                                                Toast.makeText(
+                                                        Register.this,
+                                                        "Account created. Check your email for verification.",
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+
+                                                mAuth.signOut();
+
+                                                Intent intent =
+                                                        new Intent(
+                                                                Register.this,
+                                                                Login.class
+                                                        );
+
+                                                intent.addFlags(
+                                                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                                                | Intent.FLAG_ACTIVITY_NEW_TASK
+                                                );
+
+                                                startActivity(intent);
+                                                finish();
+
+                                            } else {
+
+                                                firebaseUser.delete();
+                                                mAuth.signOut();
+
+                                                Toast.makeText(
+                                                        Register.this,
+                                                        "Account created but user data could not be saved",
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+                                            }
+                                        });
                             });
                 });
     }

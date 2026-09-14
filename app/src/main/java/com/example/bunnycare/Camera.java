@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.text.LineBreaker;
 import android.media.ThumbnailUtils;
 import android.net.ConnectivityManager;
@@ -17,15 +19,23 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.Layout;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.method.LinkMovementMethod;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.text.util.Linkify;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -70,12 +80,10 @@ public class Camera extends Fragment {
 
     int imageSize = 224;
 
-    // Confidence gate used on the breed model to decide whether a rabbit
-    // is present in the photo at all.
     static final float RABBIT_PRESENCE_THRESHOLD = 0.95f;
-    // Confidence needed before we report a specific disease instead of
-    // "No signs of illness detected".
-    static final float DISEASE_REPORT_THRESHOLD = 0.95f;
+    static final float DISEASE_REPORT_THRESHOLD = 0.97f;
+    static final float DISEASE_MIN_MARGIN = 0.20f;
+    static final float MYXOMATOSIS_REPORT_THRESHOLD = 0.995f;
 
     static final String NO_ILLNESS_LABEL = "No signs of illness detected";
 
@@ -108,9 +116,6 @@ public class Camera extends Fragment {
     ActivityResultLauncher<String> featurePickerLauncher;
     ActivityResultLauncher<String> permissionLauncher;
 
-    // Tracks whether a pending camera permission request was triggered by
-    // the main scan flow or by the per-feature close-up capture flow, so
-    // the permission callback knows which launcher to resume with.
     boolean pendingFeatureCameraCapture = false;
 
     Executor geminiExecutor = Executors.newSingleThreadExecutor();
@@ -118,6 +123,8 @@ public class Camera extends Fragment {
     Bitmap lastOriginalImage;
     List<Bitmap> featureImages = new ArrayList<>();
     int currentFeatureIndex = 0;
+
+    private PopupWindow geminiTipPopup;
 
     private View statusBadge;
     private View statusDot;
@@ -362,12 +369,6 @@ public class Camera extends Fragment {
         return (int) (dp * getResources().getDisplayMetrics().density);
     }
 
-    /**
-     * Makes any http/https URLs in an AlertDialog's message clickable, and
-     * justifies the body text. Must be called AFTER dialog.show(), since
-     * the message TextView doesn't exist until the dialog is actually
-     * inflated.
-     */
     private void styleDialogMessage(AlertDialog dialog) {
 
         TextView messageView = dialog.findViewById(android.R.id.message);
@@ -381,6 +382,27 @@ public class Camera extends Fragment {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             messageView.setJustificationMode(LineBreaker.JUSTIFICATION_MODE_INTER_WORD);
+        }
+    }
+
+    private void highlightVetRequired(SpannableStringBuilder sb) {
+
+        final String target = "Vet required";
+        final int RED = 0xFFD32F2F;
+        final int RED_HIGHLIGHT = 0x33D32F2F;
+
+        String text = sb.toString();
+        int index = text.indexOf(target);
+
+        while (index >= 0) {
+
+            int end = index + target.length();
+
+            sb.setSpan(new ForegroundColorSpan(RED), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new BackgroundColorSpan(RED_HIGHLIGHT), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+            index = text.indexOf(target, end);
         }
     }
 
@@ -491,6 +513,11 @@ public class Camera extends Fragment {
             connectivityManager.unregisterNetworkCallback(networkCallback);
         }
 
+        if (geminiTipPopup != null && geminiTipPopup.isShowing()) {
+            geminiTipPopup.dismiss();
+        }
+        geminiTipPopup = null;
+
         networkCallback = null;
         statusBadge = null;
         statusDot = null;
@@ -515,11 +542,6 @@ public class Camera extends Fragment {
         }
     }
 
-    /**
-     * Same as openCamera(), but resumes the per-feature close-up capture
-     * flow instead of the main scan flow once a photo is taken (or
-     * permission is granted).
-     */
     private void openCameraForFeature() {
 
         pendingFeatureCameraCapture = true;
@@ -553,13 +575,6 @@ public class Camera extends Fragment {
         }
     }
 
-    /**
-     * Runs both the breed classifier and the disease classifier on the
-     * same photo and reports both results together. The breed model's
-     * confidence is used as the gate for "is there actually a rabbit in
-     * this photo" — if that's too low we don't bother reporting disease
-     * either, since we can't trust that we're looking at a rabbit at all.
-     */
     private void runLocalClassification(Bitmap image) {
 
         Bitmap processedImage =
@@ -588,7 +603,6 @@ public class Camera extends Fragment {
 
         try {
 
-            // --- Breed classification (also gates rabbit presence) ---
             ImageClassifier.ImageClassifierOptions breedOptions =
                     ImageClassifier.ImageClassifierOptions.builder()
                             .setBaseOptions(BaseOptions.builder().build())
@@ -639,7 +653,6 @@ public class Camera extends Fragment {
                 return;
             }
 
-            // --- Disease classification (informational only) ---
             String diseaseLabel = NO_ILLNESS_LABEL;
 
             try {
@@ -679,7 +692,13 @@ public class Camera extends Fragment {
                             && diseaseIndex >= 0
                             && diseaseIndex < diseaseLabels.length) {
 
-                        diseaseLabel = diseaseLabels[diseaseIndex];
+                        String candidateLabel = diseaseLabels[diseaseIndex];
+
+                        boolean isMyxomatosis = candidateLabel.equalsIgnoreCase("Myxomatosis");
+
+                        if (!isMyxomatosis || diseaseConfidence >= MYXOMATOSIS_REPORT_THRESHOLD) {
+                            diseaseLabel = candidateLabel;
+                        }
                     }
                 }
 
@@ -719,6 +738,34 @@ public class Camera extends Fragment {
                         "Take Picture Again",
                         (d, which) -> openCamera()
                 )
+                .setNeutralButton(
+                        "Choose Photo",
+                        (d, which) -> mainImagePickerLauncher.launch("image/*")
+                )
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
+                .show();
+
+        styleDialogMessage(dialog);
+    }
+
+    private void showGeminiNoRabbitDialog() {
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle("No Rabbit Detected")
+                .setMessage(
+                        "Gemini couldn't find a rabbit in the photo you provided. Please take or choose another picture with the rabbit clearly visible."
+                )
+                .setPositiveButton(
+                        "Take Picture",
+                        (d, which) -> openCamera()
+                )
+                .setNeutralButton(
+                        "Choose Photo",
+                        (d, which) -> mainImagePickerLauncher.launch("image/*")
+                )
                 .setNegativeButton(
                         "Cancel",
                         null
@@ -735,7 +782,7 @@ public class Camera extends Fragment {
             String diseaseInfo
     ) {
 
-        StringBuilder message = new StringBuilder();
+        SpannableStringBuilder message = new SpannableStringBuilder();
 
         message.append("Breed: ").append(breedLabel).append("\n");
         message.append("Health: ").append(diseaseLabel).append("\n\n");
@@ -745,9 +792,11 @@ public class Camera extends Fragment {
             message.append("\n\n").append(diseaseInfo);
         }
 
+        highlightVetRequired(message);
+
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setTitle("Scan Results")
-                .setMessage(message.toString())
+                .setMessage(message)
                 .setPositiveButton("OK", null)
                 .setNeutralButton(
                         "Improve with Gemini",
@@ -762,7 +811,151 @@ public class Camera extends Fragment {
 
         featureImages = new ArrayList<>();
         currentFeatureIndex = 0;
-        promptNextFeatureOrRun();
+        showGeminiFeatureTipOverlay();
+    }
+
+    private void showGeminiFeatureTipOverlay() {
+
+        if (getView() == null || !isAdded()) {
+            promptNextFeatureOrRun();
+            return;
+        }
+
+        if (geminiTipPopup != null && geminiTipPopup.isShowing()) {
+            return;
+        }
+
+        Context context = requireContext();
+
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+
+        int padding = dpToPx(20);
+        card.setPadding(padding, padding, padding, padding);
+
+        GradientDrawable cardBackground = new GradientDrawable();
+        cardBackground.setColor(0xFFFFFFFF);
+        cardBackground.setCornerRadius(dpToPx(18));
+        cardBackground.setStroke(dpToPx(1), 0xFFE3DECF);
+        card.setBackground(cardBackground);
+        card.setElevation(dpToPx(10));
+
+        TextView title = new TextView(context);
+        title.setText("Get better results with Gemini");
+        title.setTextSize(16f);
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        title.setTextColor(0xFF3A3226);
+        card.addView(title);
+
+        TextView message = new TextView(context);
+        message.setText(
+                "Before we continue, have close-up photos ready of the rabbit's "
+                        + buildFeatureListText()
+                        + ". Gemini uses these close-ups together with your original "
+                        + "photo to give a more accurate breed and health estimate."
+        );
+        message.setTextSize(14f);
+        message.setTextColor(0xFF5C5748);
+        message.setLineSpacing(dpToPx(2), 1f);
+
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
+                dpToPx(260),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        messageParams.topMargin = dpToPx(10);
+        message.setLayoutParams(messageParams);
+        card.addView(message);
+
+        LinearLayout buttonRow = new LinearLayout(context);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+        buttonRow.setGravity(Gravity.END);
+
+        LinearLayout.LayoutParams buttonRowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        buttonRowParams.topMargin = dpToPx(18);
+        buttonRow.setLayoutParams(buttonRowParams);
+
+        Button closeButton = new Button(context);
+        closeButton.setText("Close");
+        closeButton.setTextColor(0xFF5C5748);
+        closeButton.setBackground(null);
+        closeButton.setAllCaps(false);
+
+        Button readyButton = new Button(context);
+        readyButton.setText("Ready");
+        readyButton.setTextColor(0xFFFFFFFF);
+        readyButton.setAllCaps(false);
+
+        GradientDrawable readyBackground = new GradientDrawable();
+        readyBackground.setColor(0xFF3A7D44);
+        readyBackground.setCornerRadius(dpToPx(10));
+        readyButton.setBackground(readyBackground);
+
+        int readyHorizontalPad = dpToPx(18);
+        int readyVerticalPad = dpToPx(6);
+        readyButton.setPadding(readyHorizontalPad, readyVerticalPad, readyHorizontalPad, readyVerticalPad);
+
+        LinearLayout.LayoutParams readyParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        readyParams.setMarginStart(dpToPx(12));
+        readyButton.setLayoutParams(readyParams);
+
+        buttonRow.addView(closeButton);
+        buttonRow.addView(readyButton);
+
+        card.addView(buttonRow);
+
+        PopupWindow popupWindow = new PopupWindow(
+                card,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+        );
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setFocusable(true);
+
+        geminiTipPopup = popupWindow;
+
+        closeButton.setOnClickListener(v -> popupWindow.dismiss());
+
+        readyButton.setOnClickListener(v -> {
+            popupWindow.dismiss();
+            promptNextFeatureOrRun();
+        });
+
+        popupWindow.setOnDismissListener(() -> {
+            if (geminiTipPopup == popupWindow) {
+                geminiTipPopup = null;
+            }
+        });
+
+        popupWindow.showAtLocation(getView(), Gravity.CENTER, 0, 0);
+    }
+
+    private String buildFeatureListText() {
+
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0; i < featureNames.length; i++) {
+
+            String lowerName = featureNames[i].toLowerCase(Locale.ROOT);
+
+            if (i == 0) {
+                builder.append(lowerName);
+            } else if (i == featureNames.length - 1) {
+                builder.append(
+                        featureNames.length > 2 ? ", and " : " and "
+                ).append(lowerName);
+            } else {
+                builder.append(", ").append(lowerName);
+            }
+        }
+
+        return builder.toString();
     }
 
     private void promptNextFeatureOrRun() {
@@ -772,13 +965,26 @@ public class Camera extends Fragment {
             String feature =
                     featureNames[currentFeatureIndex];
 
+            String featureLower = feature.toLowerCase(Locale.ROOT);
+
+            String prefix = "Please choose a close-up photo of the rabbit's ";
+            String suffix = " from your gallery.";
+
+            SpannableString message = new SpannableString(prefix + featureLower + suffix);
+
+            int start = prefix.length();
+            int end = start + featureLower.length();
+
+            message.setSpan(
+                    new StyleSpan(android.graphics.Typeface.BOLD),
+                    start,
+                    end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+
             new AlertDialog.Builder(requireContext())
                     .setTitle("Better result with Gemini")
-                    .setMessage(
-                            "Please choose a close-up photo of the rabbit's "
-                                    + feature.toLowerCase(Locale.ROOT)
-                                    + " from your gallery."
-                    )
+                    .setMessage(message)
                     .setCancelable(false)
                     .setPositiveButton(
                             "Choose Photo",
@@ -805,11 +1011,6 @@ public class Camera extends Fragment {
         }
     }
 
-    /**
-     * Sends the original photo plus any feature close-ups to Gemini and
-     * asks it to identify BOTH the breed and any disease/condition in a
-     * single combined response.
-     */
     private void runGeminiRefinement() {
 
         if (lastOriginalImage == null) {
@@ -849,6 +1050,11 @@ public class Camera extends Fragment {
                 "You are both a rabbit breed expert and a rabbit health expert. Analyze the overall photo plus "
                         + "the close-up feature photos provided (each labeled) to identify BOTH the rabbit's breed "
                         + "AND any visible disease or health condition in a single pass.\n\n"
+                        + "First, check whether a rabbit is actually present and clearly visible in the overall photo. "
+                        + "If no rabbit can be identified in the photo, do not guess a breed or disease and do not include "
+                        + "any confidences or care plan. Instead respond ONLY with this exact JSON and nothing else: "
+                        + "{\"breed\": \"No rabbit detected\"}\n\n"
+                        + "If a rabbit IS present, continue with the full analysis below.\n\n"
                         + "For the breed, evaluate the rabbit against ALL recognized domestic rabbit breeds. "
                         + "Return a percentage confidence for every breed that is reasonably plausible based on the photos. "
                         + "Do not use categories such as \"Other\", \"Unknown\", \"Unidentified\", or \"Mixed\" as a breed. "
@@ -863,6 +1069,11 @@ public class Camera extends Fragment {
                         + "Return a percentage likelihood for every relevant disease or health condition. "
                         + "Do not use \"Other\" or \"Unknown\" as a disease category. "
                         + "If there are no visible signs of illness, give \"Healthy\" the highest percentage. "
+                        + "Myxomatosis is a severe, comparatively rare condition with very distinctive signs "
+                        + "(swollen eyelids, puffy skin/lumps around the face, ears, and genitals, thick eye or nasal discharge). "
+                        + "Only assign Myxomatosis a meaningfully high percentage if those specific signs are clearly visible; "
+                        + "otherwise keep its percentage low and favor more common explanations (e.g. Healthy, Mites, "
+                        + "Malocclusion, Pasteurellosis, or general skin/fur conditions). "
                         + "The disease confidence percentages must add up to exactly 100.\n\n"
                         + "Also write one short combined care plan covering diet, housing/exercise, breed-specific notes, "
                         + "and any health guidance or warning signs based on what you found. "
@@ -872,7 +1083,7 @@ public class Camera extends Fragment {
                         + "\"Mini Lop\": 10, \"Netherland Dwarf\": 5, \"Lionhead\": 5}, "
                         + "\"disease\": \"Healthy\", \"disease_confidences\": {\"Healthy\": 80, "
                         + "\"Mites\": 5, \"Malocclusion\": 5, \"Pasteurellosis\": 5, \"Myxomatosis\": 5}, "
-                        + "\"care\": \"short combined care plan here\"}";;
+                        + "\"care\": \"short combined care plan here\"}";
 
         Content.Builder contentBuilder =
                 new Content.Builder()
@@ -962,6 +1173,14 @@ public class Camera extends Fragment {
                                 "Unknown"
                         );
 
+                if (breedLabel.equalsIgnoreCase("Unknown")
+                        || breedLabel.equalsIgnoreCase("No rabbit")
+                        || breedLabel.equalsIgnoreCase("No rabbit detected")) {
+
+                    showGeminiNoRabbitDialog();
+                    return;
+                }
+
                 JSONObject breedConfidences =
                         obj.optJSONObject("breed_confidences");
 
@@ -980,16 +1199,8 @@ public class Camera extends Fragment {
                                 ""
                         ).trim();
 
-                if (breedLabel.equalsIgnoreCase("Unknown")
-                        || breedLabel.equalsIgnoreCase("No rabbit")
-                        || breedLabel.equalsIgnoreCase("No rabbit detected")) {
-
-                    showNoRabbitDetectedDialog();
-                    return;
-                }
-
-                StringBuilder message =
-                        new StringBuilder();
+                SpannableStringBuilder message =
+                        new SpannableStringBuilder();
 
                 message.append("Breed: ")
                         .append(breedLabel)
@@ -1014,9 +1225,11 @@ public class Camera extends Fragment {
                             .append("\n");
                 }
 
+                highlightVetRequired(message);
+
                 AlertDialog dialog = new AlertDialog.Builder(requireContext())
                         .setTitle("Gemini Breed & Health Estimate")
-                        .setMessage(message.toString())
+                        .setMessage(message)
                         .setPositiveButton("OK", null)
                         .show();
 
@@ -1041,7 +1254,7 @@ public class Camera extends Fragment {
         });
     }
 
-    private void appendConfidences(StringBuilder message, JSONObject confidences) {
+    private void appendConfidences(SpannableStringBuilder message, JSONObject confidences) {
 
         if (confidences == null) {
             return;
@@ -1058,9 +1271,11 @@ public class Camera extends Fragment {
             message.append(key)
                     .append(": ")
                     .append(
-                            confidences.optInt(
-                                    key,
-                                    0
+                            String.valueOf(
+                                    confidences.optInt(
+                                            key,
+                                            0
+                                    )
                             )
                     )
                     .append("%\n");
@@ -1099,13 +1314,6 @@ public class Camera extends Fragment {
         return trimmed;
     }
 
-    /**
-     * Breed-specific care summary. Figures are drawn from Merck Veterinary
-     * Manual, PetMD, Animal Humane Society, and the Californian/Holland Lop
-     * breed guides — general portion rule of thumb is about 1/4 cup of
-     * pellets per 4-5 lb of body weight, with hay making up the bulk of
-     * the diet.
-     */
     private String getCareInfo(String breed) {
 
         switch (breed.toLowerCase()) {

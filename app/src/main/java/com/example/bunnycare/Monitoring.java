@@ -185,7 +185,6 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
 
         String[] options = {
                 "Edit Rabbit Details",
-                "QR Options",
                 "Delete Rabbit"
         };
 
@@ -198,8 +197,6 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
                             if (which == 0) {
                                 editRabbit(rabbit);
                             } else if (which == 1) {
-                                showQROptions(rabbit);
-                            } else if (which == 2) {
                                 confirmDeleteRabbit(rabbit);
                             }
                         }
@@ -231,109 +228,6 @@ public class Monitoring extends Fragment implements RabbitAdapter.OnRabbitItemLi
         intent.putExtra("rabbitId", rabbitId);
 
         addRabbitLauncher.launch(intent);
-    }
-
-    private void showQROptions(Rabbit rabbit) {
-
-        String[] options = {
-                "View QR",
-                "Remove QR"
-        };
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle("QR Options")
-                .setItems(
-                        options,
-                        (dialog, which) -> {
-
-                            if (which == 0) {
-                                openQR(rabbit);
-                            } else if (which == 1) {
-                                removeQR(rabbit);
-                            }
-                        }
-                )
-                .show();
-    }
-
-    private void openQR(Rabbit rabbit) {
-
-        String rabbitId = rabbit.getId();
-
-        if (rabbitId == null || rabbitId.isEmpty()) {
-
-            Toast.makeText(
-                    requireContext(),
-                    "Rabbit ID not found",
-                    Toast.LENGTH_SHORT
-            ).show();
-
-            return;
-        }
-
-        Intent intent = new Intent(
-                requireActivity(),
-                QRActivity.class
-        );
-
-        intent.putExtra(
-                "data",
-                rabbitId
-        );
-
-        startActivity(intent);
-    }
-
-    private void removeQR(Rabbit rabbit) {
-
-        String rabbitId = rabbit.getId();
-
-        if (rabbitId == null || rabbitId.isEmpty()) {
-            return;
-        }
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle("Remove QR")
-                .setMessage(
-                        "Remove the QR code from "
-                                + safeName(rabbit)
-                                + "?"
-                )
-                .setNegativeButton(
-                        "Cancel",
-                        null
-                )
-                .setPositiveButton(
-                        "Remove",
-                        (dialog, which) -> {
-
-                            db.collection("rabbits")
-                                    .document(rabbitId)
-                                    .update("hasQr", false)
-                                    .addOnSuccessListener(unused -> {
-
-                                        rabbit.setHasQr(false);
-
-                                        adapter.notifyDataSetChanged();
-
-                                        Toast.makeText(
-                                                requireContext(),
-                                                "QR removed",
-                                                Toast.LENGTH_SHORT
-                                        ).show();
-                                    })
-                                    .addOnFailureListener(e -> {
-
-                                        Toast.makeText(
-                                                requireContext(),
-                                                "Failed to remove QR: "
-                                                        + e.getMessage(),
-                                                Toast.LENGTH_LONG
-                                        ).show();
-                                    });
-                        }
-                )
-                .show();
     }
 
     private void confirmDeleteRabbit(Rabbit rabbit) {

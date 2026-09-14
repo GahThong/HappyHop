@@ -174,12 +174,15 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                                                         Map<String, Object> notification =
                                                                 new HashMap<>();
 
-                                                        notification.put("toUserId", posterId);
-                                                        notification.put("fromUserName",
+                                                        notification.put("recipientId", posterId);
+                                                        notification.put("senderId", uid);
+                                                        notification.put("senderName",
                                                                 username);
+                                                        notification.put("message",
+                                                                username + " liked your post");
                                                         notification.put("type", "like");
-                                                        notification.put("postText",
-                                                                originalPost.get("post"));
+                                                        notification.put("postId", postId);
+                                                        notification.put("read", false);
                                                         notification.put("timestamp",
                                                                 FieldValue.serverTimestamp());
 
@@ -344,17 +347,23 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                                             Map<String, Object> notification =
                                                     new HashMap<>();
 
-                                            notification.put("toUserId",
+                                            notification.put("recipientId",
                                                     posterId);
 
-                                            notification.put("fromUserName",
+                                            notification.put("senderId", uid);
+
+                                            notification.put("senderName",
                                                     username);
+
+                                            notification.put("message",
+                                                    username + " commented on your post");
 
                                             notification.put("type",
                                                     "comment");
 
-                                            notification.put("postText",
-                                                    originalPost.get("post"));
+                                            notification.put("postId", postId);
+
+                                            notification.put("read", false);
 
                                             notification.put("timestamp",
                                                     FieldValue.serverTimestamp());
@@ -622,5 +631,8 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
             profileImageView =
                     itemView.findViewById(R.id.profileImageView);
         }
+    }
+
+    public static class OnPostItemListener {
     }
 }

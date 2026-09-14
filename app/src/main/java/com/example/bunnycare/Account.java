@@ -25,9 +25,12 @@ import com.cloudinary.android.MediaManager;
 import com.cloudinary.android.callback.ErrorInfo;
 import com.cloudinary.android.callback.UploadCallback;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
@@ -39,12 +42,13 @@ import java.util.Map;
 
 /**
  * Profile screen: avatar, name, email, "Edit Profile", the "My Rabbits" list,
- * and the Account card (Notifications / Privacy / Log Out).
+ * and the Account card (Notifications / Account Settings / Log Out).
  *
  * Assumed Firestore shape (adjust field names to match your project if different):
- *   users/{uid}          -> username, email, imageUrl
- *   rabbits               -> ownerId, name, breed, imageUrl
- *   notifications         -> recipientId, message, read, timestamp
+ *   users/{uid}              -> username, email, imageUrl
+ *   rabbits                   -> ownerId, name, breed, imageUrl
+ *   notifications              -> recipientId, message, read, timestamp
+ *   verificationRequests      -> userId, licenseImageUrl, status, submittedAt
  */
 public class Account extends Fragment {
 
@@ -65,6 +69,10 @@ public class Account extends Fragment {
     Uri imageUri;
     ActivityResultLauncher<Intent> imagePickerLauncher;
 
+    // Separate picker just for the vet license photo used in "Verify Account"
+    Uri verificationImageUri;
+    ActivityResultLauncher<Intent> verificationImagePickerLauncher;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
@@ -79,7 +87,7 @@ public class Account extends Fragment {
         rabbitsRecyclerView = view.findViewById(R.id.rabbitsRecyclerView);
         rowNotifications = view.findViewById(R.id.rowNotifications);
         notificationBadge = view.findViewById(R.id.notificationBadge);
-        rowPrivacy = view.findViewById(R.id.rowPrivacy);
+        rowPrivacy = view.findViewById(R.id.rowPrivacy); // TODO: rename id/label to "Account Settings" in XML
         rowLogout = view.findViewById(R.id.rowLogout);
 
         mAuth = FirebaseAuth.getInstance();
@@ -101,6 +109,16 @@ public class Account extends Fragment {
                                 .into(profileImage);
 
                         uploadProfileImage();
+                    }
+                });
+
+        verificationImagePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+
+                        verificationImageUri = result.getData().getData();
+                        uploadVerificationPhoto();
                     }
                 });
 
@@ -137,7 +155,7 @@ public class Account extends Fragment {
 
         rowNotifications.setOnClickListener(v -> showNotifications());
 
-        rowPrivacy.setOnClickListener(v -> showPrivacy());
+        rowPrivacy.setOnClickListener(v -> openAccountSettings());
 
         rowLogout.setOnClickListener(v -> logOut());
 
@@ -150,6 +168,14 @@ public class Account extends Fragment {
         intent.setType("image/*");
 
         imagePickerLauncher.launch(intent);
+    }
+
+    private void openVerificationGallery() {
+
+        Intent intent = new Intent(Intent.ACTION_PICK);
+        intent.setType("image/*");
+
+        verificationImagePickerLauncher.launch(intent);
     }
 
     private void uploadProfileImage() {
@@ -184,6 +210,74 @@ public class Account extends Fragment {
                                     if (!isAdded() || getContext() == null) return;
 
                                     Toast.makeText(getContext(), "Profile photo updated", Toast.LENGTH_SHORT).show();
+                                });
+                    }
+
+                    @Override
+                    public void onError(String requestId, ErrorInfo error) {
+
+                        if (!isAdded() || getContext() == null) return;
+
+                        Toast.makeText(getContext(), "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
+                    }
+
+                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
+
+                }).dispatch();
+    }
+
+    /**
+     * Uploads the vet license photo and creates a pending verification
+     * request for the admin to review. Does NOT flip any "verified" flag
+     * client-side — that should only ever happen from the admin side
+     * (e.g. an Admin Cloud Function or admin app writing back to the user doc)
+     * so a user can't just mark themselves verified.
+     */
+    private void uploadVerificationPhoto() {
+
+        if (verificationImageUri == null) return;
+
+        if (isAdded()) {
+            Toast.makeText(getContext(), "Uploading license photo...", Toast.LENGTH_SHORT).show();
+        }
+
+        MediaManager.get()
+                .upload(verificationImageUri)
+                .unsigned("ml_default")
+                .callback(new UploadCallback() {
+
+                    @Override public void onStart(String requestId) {}
+                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
+
+                    @Override
+                    public void onSuccess(String requestId, Map resultData) {
+
+                        String secureUrl = (String) resultData.get("secure_url");
+
+                        Map<String, Object> request = new HashMap<>();
+                        request.put("userId", user.getUid());
+                        request.put("userEmail", user.getEmail());
+                        request.put("licenseImageUrl", secureUrl);
+                        request.put("status", "pending");
+                        request.put("submittedAt", FieldValue.serverTimestamp());
+
+                        db.collection("verificationRequests")
+                                .add(request)
+                                .addOnSuccessListener(docRef -> {
+
+                                    if (!isAdded() || getContext() == null) return;
+
+                                    Toast.makeText(getContext(),
+                                            "Submitted for review. We'll notify you once an admin verifies your license.",
+                                            Toast.LENGTH_LONG).show();
+                                })
+                                .addOnFailureListener(e -> {
+
+                                    if (!isAdded() || getContext() == null) return;
+
+                                    Toast.makeText(getContext(),
+                                            "Couldn't submit for review: " + e.getMessage(),
+                                            Toast.LENGTH_LONG).show();
                                 });
                     }
 
@@ -323,13 +417,169 @@ public class Account extends Fragment {
                 });
     }
 
-    private void showPrivacy() {
+    /**
+     * Replaces the old "Privacy" dialog. Presents Change Email / Change
+     * Password / Verify Account as a simple option list.
+     */
+    private void openAccountSettings() {
+
+        String[] options = {"Change Email", "Change Password", "Verify Account"};
 
         new AlertDialog.Builder(getContext())
-                .setTitle("Privacy")
-                // TODO: replace with real privacy settings (data sharing, visibility, etc.)
-                .setMessage("Privacy settings go here.")
-                .setPositiveButton("Close", null)
+                .setTitle("Account Settings")
+                .setItems(options, (dialog, which) -> {
+
+                    switch (which) {
+                        case 0:
+                            promptReauth(this::promptChangeEmail);
+                            break;
+                        case 1:
+                            promptReauth(this::promptChangePassword);
+                            break;
+                        case 2:
+                            promptVerifyAccount();
+                            break;
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /**
+     * Firebase requires a recent sign-in before sensitive changes like
+     * updateEmail/updatePassword, or it throws FirebaseAuthRecentLoginRequiredException.
+     * This asks for the current password and re-authenticates first.
+     */
+    private void promptReauth(Runnable onSuccess) {
+
+        if (user.getEmail() == null) {
+            Toast.makeText(getContext(), "No email on file for this account.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        EditText passwordInput = new EditText(getContext());
+        passwordInput.setHint("Current password");
+        passwordInput.setInputType(
+                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Confirm It's You")
+                .setMessage("Please re-enter your password to continue.")
+                .setView(passwordInput)
+                .setPositiveButton("Confirm", (dialog, which) -> {
+
+                    String password = passwordInput.getText().toString();
+
+                    if (password.isEmpty()) return;
+
+                    AuthCredential credential = EmailAuthProvider.getCredential(user.getEmail(), password);
+
+                    user.reauthenticate(credential)
+                            .addOnSuccessListener(unused -> onSuccess.run())
+                            .addOnFailureListener(e -> {
+
+                                if (getContext() == null) return;
+
+                                Toast.makeText(getContext(), "Re-authentication failed: " + e.getMessage(),
+                                        Toast.LENGTH_LONG).show();
+                            });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void promptChangeEmail() {
+
+        EditText input = new EditText(getContext());
+        input.setHint("New email");
+        input.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Change Email")
+                .setView(input)
+                .setPositiveButton("Save", (dialog, which) -> {
+
+                    String newEmail = input.getText().toString().trim();
+
+                    if (newEmail.isEmpty()) return;
+
+                    user.updateEmail(newEmail)
+                            .addOnSuccessListener(unused -> {
+
+                                Map<String, Object> map = new HashMap<>();
+                                map.put("email", newEmail);
+
+                                db.collection("users")
+                                        .document(user.getUid())
+                                        .update(map)
+                                        .addOnSuccessListener(unused2 -> {
+
+                                            if (getContext() == null) return;
+
+                                            profileEmail.setText(newEmail);
+                                            Toast.makeText(getContext(), "Email updated", Toast.LENGTH_SHORT).show();
+                                        });
+                            })
+                            .addOnFailureListener(e -> {
+
+                                if (getContext() == null) return;
+
+                                Toast.makeText(getContext(), "Couldn't update email: " + e.getMessage(),
+                                        Toast.LENGTH_LONG).show();
+                            });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void promptChangePassword() {
+
+        EditText input = new EditText(getContext());
+        input.setHint("New password");
+        input.setInputType(
+                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Change Password")
+                .setView(input)
+                .setPositiveButton("Save", (dialog, which) -> {
+
+                    String newPassword = input.getText().toString();
+
+                    if (newPassword.length() < 6) {
+                        if (getContext() != null) {
+                            Toast.makeText(getContext(), "Password must be at least 6 characters", Toast.LENGTH_SHORT).show();
+                        }
+                        return;
+                    }
+
+                    user.updatePassword(newPassword)
+                            .addOnSuccessListener(unused -> {
+
+                                if (getContext() == null) return;
+
+                                Toast.makeText(getContext(), "Password updated", Toast.LENGTH_SHORT).show();
+                            })
+                            .addOnFailureListener(e -> {
+
+                                if (getContext() == null) return;
+
+                                Toast.makeText(getContext(), "Couldn't update password: " + e.getMessage(),
+                                        Toast.LENGTH_LONG).show();
+                            });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void promptVerifyAccount() {
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Verify Account")
+                .setMessage("To verify your account as a vet, please upload a clear photo of your veterinary license. " +
+                        "It will be sent to an admin for review.")
+                .setPositiveButton("Choose Photo", (dialog, which) -> openVerificationGallery())
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 

@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "396693874608-of25pg5nv45rk554r2n4amvliv888chl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bunnycare",
+            "certificate_hash": "c0e54c666f2a3d2bba53df08db4c8817db2919c0"
+          }
+        },
+        {
           "client_id": "396693874608-lpuh7f8ed8hl5o0vskcph3bv1s2692t0.apps.googleusercontent.com",
           "client_type": 3
         }

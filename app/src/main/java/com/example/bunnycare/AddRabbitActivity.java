@@ -58,6 +58,7 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -73,7 +74,7 @@ public class AddRabbitActivity extends AppCompatActivity {
     private Button btnSaveRabbit;
 
     private EditText editRabbitName;
-    private EditText editBreed;
+    private Spinner spinnerBreed;
     private EditText editAge;
     private EditText editLastFed;
     private EditText editLastDrink;
@@ -82,9 +83,42 @@ public class AddRabbitActivity extends AppCompatActivity {
 
     private static final String[] SEX_OPTIONS = {"Male", "Female"};
 
-    // Weight limits (kg)
-    private static final double WEIGHT_MIN_KG = 0.1;
-    private static final double WEIGHT_MAX_KG = 15.0;
+    private static final String[] BREED_OPTIONS = {
+            "Holland Lop",
+            "Mini Lop",
+            "Netherland Dwarf",
+            "Lionhead",
+            "New Zealand",
+            "Californian",
+            "Rex",
+            "Mini Rex",
+            "Dutch",
+            "Flemish Giant",
+            "English Angora",
+            "Himalayan",
+            "Other"
+    };
+
+    private static final Map<String, Integer> BREED_MAX_AGE_YEARS = new LinkedHashMap<>();
+
+    static {
+        BREED_MAX_AGE_YEARS.put("Holland Lop", 14);
+        BREED_MAX_AGE_YEARS.put("Mini Lop", 10);
+        BREED_MAX_AGE_YEARS.put("Netherland Dwarf", 10);
+        BREED_MAX_AGE_YEARS.put("Lionhead", 9);
+        BREED_MAX_AGE_YEARS.put("New Zealand", 8);
+        BREED_MAX_AGE_YEARS.put("Californian", 8);
+        BREED_MAX_AGE_YEARS.put("Rex", 8);
+        BREED_MAX_AGE_YEARS.put("Mini Rex", 10);
+        BREED_MAX_AGE_YEARS.put("Dutch", 8);
+        BREED_MAX_AGE_YEARS.put("Flemish Giant", 8);
+        BREED_MAX_AGE_YEARS.put("English Angora", 8);
+        BREED_MAX_AGE_YEARS.put("Himalayan", 8);
+        BREED_MAX_AGE_YEARS.put("Other", 12);
+    }
+
+    private static final double WEIGHT_MIN_LB = 0.2;
+    private static final double WEIGHT_MAX_LB = 35.0;
 
     private TextView txtAiSummary;
     private TextView txtWeightTrend;
@@ -179,15 +213,28 @@ public class AddRabbitActivity extends AppCompatActivity {
         btnSaveRabbit = findViewById(R.id.btnSaveRabbit);
 
         editRabbitName = findViewById(R.id.editRabbitName);
-        editBreed = findViewById(R.id.editBreed);
+        spinnerBreed = findViewById(R.id.spinnerBreed);
         editAge = findViewById(R.id.editAge);
         editLastFed = findViewById(R.id.editLastFed);
         editLastDrink = findViewById(R.id.editLastDrink);
 
-        // Age: numbers only (months), no letters/symbols.
         editAge.setInputType(InputType.TYPE_CLASS_NUMBER);
         editAge.setFilters(new InputFilter[]{new InputFilter.LengthFilter(3)});
         editAge.setHint("e.g. 6");
+
+        editLastDrink.setHint("Last hydrated");
+
+        ArrayAdapter<String> breedAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                BREED_OPTIONS
+        );
+
+        breedAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerBreed.setAdapter(breedAdapter);
 
         spinnerSex = findViewById(R.id.spinnerSex);
 
@@ -286,11 +333,21 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
 
         if (breed != null) {
-            editBreed.setText(breed);
+
+            int breedPosition = -1;
+
+            for (int i = 0; i < BREED_OPTIONS.length; i++) {
+
+                if (BREED_OPTIONS[i].equalsIgnoreCase(breed)) {
+                    breedPosition = i;
+                    break;
+                }
+            }
+
+            spinnerBreed.setSelection(breedPosition >= 0 ? breedPosition : BREED_OPTIONS.length - 1);
         }
 
         if (age != null) {
-            // Strip anything non-numeric from legacy data (e.g. "6 months" -> "6")
             String numericAge = age.replaceAll("[^0-9]", "");
             editAge.setText(numericAge);
         }
@@ -309,7 +366,7 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
 
         if (weight != null && !weight.isEmpty()) {
-            weightValue = weight;
+            weightValue = normalizeLegacyWeightToLbs(weight);
         }
 
         if (lastFed != null && !lastFed.isEmpty()) {
@@ -358,6 +415,30 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
 
         renderWeightChart();
+    }
+
+    private String normalizeLegacyWeightToLbs(String rawWeight) {
+
+        String numericOnly = rawWeight.replaceAll("[^0-9.]", "");
+
+        if (numericOnly.isEmpty()) {
+            return rawWeight;
+        }
+
+        try {
+
+            double value = Double.parseDouble(numericOnly);
+
+            if (rawWeight.toLowerCase(Locale.ROOT).contains("kg")) {
+                value = value * 2.20462;
+            }
+
+            return String.format(Locale.getDefault(), "%.1f lbs", value);
+
+        } catch (NumberFormatException e) {
+
+            return rawWeight;
+        }
     }
 
     private void pickPhoto() {
@@ -428,11 +509,6 @@ public class AddRabbitActivity extends AppCompatActivity {
                 .dispatch();
     }
 
-    /**
-     * Weight input dialog: numeric-only field (no "kg" typing possible,
-     * decimal digits only) with a fixed, non-editable "kg" label next to it.
-     * Value is clamped to WEIGHT_MIN_KG - WEIGHT_MAX_KG.
-     */
     private void showWeightDialog() {
 
         LinearLayout container = new LinearLayout(this);
@@ -447,11 +523,10 @@ public class AddRabbitActivity extends AppCompatActivity {
 
         EditText input = new EditText(this);
 
-        input.setHint("e.g. 1.9");
+        input.setHint("e.g. 4.2");
 
         input.setSingleLine(true);
 
-        // Numeric decimal input only - no letters, no "kg" typable.
         input.setInputType(
                 InputType.TYPE_CLASS_NUMBER
                         | InputType.TYPE_NUMBER_FLAG_DECIMAL
@@ -476,14 +551,14 @@ public class AddRabbitActivity extends AppCompatActivity {
             input.setSelection(input.getText().length());
         }
 
-        TextView kgLabel = new TextView(this);
+        TextView lbLabel = new TextView(this);
 
-        kgLabel.setText("kg");
+        lbLabel.setText("lbs");
 
-        kgLabel.setPadding(dpToPx(8), 0, 0, 0);
+        lbLabel.setPadding(dpToPx(8), 0, 0, 0);
 
         container.addView(input);
-        container.addView(kgLabel);
+        container.addView(lbLabel);
 
         new AlertDialog.Builder(this)
                 .setTitle("Current Weight")
@@ -500,18 +575,18 @@ public class AddRabbitActivity extends AppCompatActivity {
 
                         double parsed = Double.parseDouble(raw);
 
-                        if (parsed < WEIGHT_MIN_KG || parsed > WEIGHT_MAX_KG) {
+                        if (parsed < WEIGHT_MIN_LB || parsed > WEIGHT_MAX_LB) {
 
                             Toast.makeText(
                                     this,
-                                    "Weight must be between " + WEIGHT_MIN_KG + " kg and " + WEIGHT_MAX_KG + " kg",
+                                    "Weight must be between " + WEIGHT_MIN_LB + " lbs and " + WEIGHT_MAX_LB + " lbs",
                                     Toast.LENGTH_SHORT
                             ).show();
 
                             return;
                         }
 
-                        weightValue = parsed + " kg";
+                        weightValue = parsed + " lbs";
 
                         if (weightEditedThisSession && !weightHistory.isEmpty()) {
 
@@ -604,7 +679,7 @@ public class AddRabbitActivity extends AppCompatActivity {
             arrow = latest.value < prev ? " \u2193" : (latest.value > prev ? " \u2191" : "");
         }
 
-        txtWeightTrend.setText(latest.value + " kg" + arrow);
+        txtWeightTrend.setText(latest.value + " lbs" + arrow);
     }
 
     private int dpToPx(int dp) {
@@ -678,6 +753,25 @@ public class AddRabbitActivity extends AppCompatActivity {
         datePicker.show();
     }
 
+    private String getSelectedBreed() {
+        return spinnerBreed.getSelectedItem() != null
+                ? spinnerBreed.getSelectedItem().toString()
+                : BREED_OPTIONS[0];
+    }
+
+    private int getMaxAgeMonthsForSelectedBreed() {
+
+        String breed = getSelectedBreed();
+
+        Integer years = BREED_MAX_AGE_YEARS.get(breed);
+
+        if (years == null) {
+            years = 12;
+        }
+
+        return years * 12;
+    }
+
     private void generateAiSummary() {
 
         String name = editRabbitName.getText().toString().trim();
@@ -699,7 +793,7 @@ public class AddRabbitActivity extends AppCompatActivity {
 
         txtAiSummary.setText("Gemini is analyzing your rabbit...");
 
-        String breed = editBreed.getText().toString().trim();
+        String breed = getSelectedBreed();
         String age = editAge.getText().toString().trim();
         String sex = spinnerSex.getSelectedItem() != null
                 ? spinnerSex.getSelectedItem().toString()
@@ -756,7 +850,7 @@ public class AddRabbitActivity extends AppCompatActivity {
             }
 
             if (!lastDrink.isEmpty()) {
-                prompt.append(" Last water: ").append(lastDrink).append(".");
+                prompt.append(" Last hydrated: ").append(lastDrink).append(".");
             }
 
             prompt.append(" Give a concise summary covering general condition, feeding, hydration, weight monitoring, and important things the owner should watch for.");
@@ -841,10 +935,6 @@ public class AddRabbitActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Saves a generated AI summary into the rabbit's summaries subcollection
-     * so past summaries aren't lost when a new one is generated.
-     */
     private void saveSummaryToHistory(String text) {
 
         if (rabbitRef == null) {
@@ -863,10 +953,6 @@ public class AddRabbitActivity extends AppCompatActivity {
                 );
     }
 
-    /**
-     * Loads past AI summaries for this rabbit (newest first) and lets the
-     * user tap one to view it in full.
-     */
     private void showSummaryHistory() {
 
         if (rabbitRef == null) {
@@ -933,7 +1019,7 @@ public class AddRabbitActivity extends AppCompatActivity {
     private void saveRabbit() {
 
         String name = editRabbitName.getText().toString().trim();
-        String breed = editBreed.getText().toString().trim();
+        String breed = getSelectedBreed();
         String age = editAge.getText().toString().trim();
 
         if (name.isEmpty()) {
@@ -956,6 +1042,23 @@ public class AddRabbitActivity extends AppCompatActivity {
                     editAge.setError("Enter a valid age");
 
                     editAge.requestFocus();
+
+                    return;
+                }
+
+                int maxAgeMonths = getMaxAgeMonthsForSelectedBreed();
+
+                if (ageMonths > maxAgeMonths) {
+
+                    editAge.setError("Exceeds typical lifespan for " + breed + " (~" + (maxAgeMonths / 12) + " yrs)");
+
+                    editAge.requestFocus();
+
+                    Toast.makeText(
+                            this,
+                            breed + " rabbits typically live up to about " + (maxAgeMonths / 12) + " years (" + maxAgeMonths + " months)",
+                            Toast.LENGTH_LONG
+                    ).show();
 
                     return;
                 }

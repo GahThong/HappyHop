@@ -2,12 +2,21 @@ package com.example.bunnycare;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.preference.PreferenceManager;
+import android.widget.EditText;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -18,8 +27,14 @@ import android.view.ViewGroup;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import org.osmdroid.config.Configuration;
+import org.osmdroid.events.MapEventsReceiver;
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.tileprovider.tilesource.TileSourcePolicy;
@@ -28,10 +43,13 @@ import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.FolderOverlay;
 import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.views.overlay.MapEventsOverlay;
 import org.osmdroid.api.IMapController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Maps extends Fragment {
 
@@ -51,6 +69,15 @@ public class Maps extends Fragment {
             ));
 
     private Marker userMarker;
+
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
+    private FirebaseUser currentUser;
+    private boolean isVerifiedVet = false;
+
+    private FolderOverlay approvedVetPinLayer;
+    private FolderOverlay myPendingPinLayer;
+    private double lastKnownLat, lastKnownLng;
 
     class Vet {
         double lat, lng;
@@ -101,10 +128,13 @@ public class Maps extends Fragment {
                 PreferenceManager.getDefaultSharedPreferences(getActivity())
         );
 
-
         Configuration.getInstance().setUserAgentValue(getActivity().getPackageName());
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(getActivity());
+
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+        currentUser = mAuth.getCurrentUser();
 
         mapView = view.findViewById(R.id.mapView);
         mapView.setTileSource(TileSourceFactory.OpenTopo);
@@ -113,18 +143,205 @@ public class Maps extends Fragment {
 
         mapController = mapView.getController();
 
+        MapEventsOverlay longPressOverlay = new MapEventsOverlay(new MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
+                return false;
+            }
+
+            @Override
+            public boolean longPressHelper(GeoPoint p) {
+                onMapLongPress(p);
+                return true;
+            }
+        });
+        mapView.getOverlays().add(longPressOverlay);
+
         requestPermissionsIfNecessary(new String[]{
                 Manifest.permission.ACCESS_FINE_LOCATION
         });
 
         mapController.setZoom(10.0);
 
+        checkVetVerificationStatus();
         getCurrentLocation();
 
         mapView.setOnClickListener(v -> {
             mapController.animateTo(mapView.getMapCenter());
             mapController.setZoom(15.0);
         });
+    }
+
+    private void checkVetVerificationStatus() {
+
+        if (currentUser == null) return;
+
+        db.collection("users")
+                .document(currentUser.getUid())
+                .get()
+                .addOnSuccessListener(doc -> {
+
+                    if (doc.exists() && Boolean.TRUE.equals(doc.getBoolean("verified"))) {
+                        isVerifiedVet = true;
+                    }
+
+                    loadMyPendingPin();
+                });
+    }
+
+    private void onMapLongPress(GeoPoint point) {
+
+        if (currentUser == null) {
+            Toast.makeText(getContext(), "Please log in first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (!isVerifiedVet) {
+            Toast.makeText(getContext(),
+                    "Only verified vets can add a clinic pin. Verify your account from your profile first.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        promptAddVetPin(point);
+    }
+
+    private void promptAddVetPin(GeoPoint point) {
+
+        EditText input = new EditText(getContext());
+        input.setHint("Clinic name");
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Add Vet Clinic Pin")
+                .setMessage("This pin will be reviewed by an admin before it appears on the public map.")
+                .setView(input)
+                .setPositiveButton("Submit", (dialog, which) -> {
+
+                    String clinicName = input.getText().toString().trim();
+
+                    if (clinicName.isEmpty()) {
+                        Toast.makeText(getContext(), "Please enter a clinic name", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    submitVetPin(point, clinicName);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void submitVetPin(GeoPoint point, String clinicName) {
+
+        Map<String, Object> pin = new HashMap<>();
+        pin.put("vetId", currentUser.getUid());
+        pin.put("vetName", currentUser.getDisplayName());
+        pin.put("clinicName", clinicName);
+        pin.put("latitude", point.getLatitude());
+        pin.put("longitude", point.getLongitude());
+        pin.put("status", "pending");
+        pin.put("submittedAt", FieldValue.serverTimestamp());
+
+        db.collection("vetPins")
+                .add(pin)
+                .addOnSuccessListener(docRef -> {
+
+                    if (getContext() == null) return;
+
+                    Toast.makeText(getContext(),
+                            "Pin submitted. It'll appear on the map once an admin approves it.",
+                            Toast.LENGTH_LONG).show();
+
+                    loadMyPendingPin();
+                })
+                .addOnFailureListener(e -> {
+
+                    if (getContext() == null) return;
+
+                    Toast.makeText(getContext(), "Couldn't submit pin: " + e.getMessage(),
+                            Toast.LENGTH_LONG).show();
+                });
+    }
+
+    private void loadMyPendingPin() {
+
+        if (currentUser == null || !isVerifiedVet) return;
+
+        db.collection("vetPins")
+                .whereEqualTo("vetId", currentUser.getUid())
+                .whereEqualTo("status", "pending")
+                .addSnapshotListener((value, error) -> {
+
+                    if (error != null || value == null || getContext() == null || mapView == null) return;
+
+                    if (myPendingPinLayer != null) {
+                        mapView.getOverlays().remove(myPendingPinLayer);
+                    }
+
+                    myPendingPinLayer = new FolderOverlay(getActivity());
+                    mapView.getOverlays().add(myPendingPinLayer);
+
+                    Drawable icon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
+
+                    for (DocumentSnapshot doc : value.getDocuments()) {
+
+                        Double lat = doc.getDouble("latitude");
+                        Double lng = doc.getDouble("longitude");
+                        String clinicName = doc.getString("clinicName");
+
+                        if (lat == null || lng == null) continue;
+
+                        Marker marker = new Marker(mapView);
+                        marker.setPosition(new GeoPoint(lat, lng));
+                        marker.setTitle("⏳ " + (clinicName != null ? clinicName : "Your clinic"));
+                        marker.setSnippet("Pending admin approval — only visible to you");
+                        marker.setIcon(icon);
+                        marker.setAlpha(0.5f);
+                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+                        myPendingPinLayer.add(marker);
+                    }
+
+                    mapView.invalidate();
+                });
+    }
+
+    private void loadApprovedVetPins() {
+
+        db.collection("vetPins")
+                .whereEqualTo("status", "approved")
+                .addSnapshotListener((value, error) -> {
+
+                    if (error != null || value == null || getContext() == null || mapView == null) return;
+
+                    if (approvedVetPinLayer != null) {
+                        mapView.getOverlays().remove(approvedVetPinLayer);
+                    }
+
+                    approvedVetPinLayer = new FolderOverlay(getActivity());
+                    mapView.getOverlays().add(approvedVetPinLayer);
+
+                    Drawable icon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
+
+                    for (DocumentSnapshot doc : value.getDocuments()) {
+
+                        Double lat = doc.getDouble("latitude");
+                        Double lng = doc.getDouble("longitude");
+                        String clinicName = doc.getString("clinicName");
+
+                        if (lat == null || lng == null) continue;
+
+                        Marker marker = new Marker(mapView);
+                        marker.setPosition(new GeoPoint(lat, lng));
+                        marker.setTitle("🐾 Vet: " + (clinicName != null ? clinicName : "Verified Clinic"));
+                        marker.setSnippet("Verified Veterinary Clinic");
+                        marker.setIcon(icon);
+                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+                        approvedVetPinLayer.add(marker);
+                    }
+
+                    mapView.invalidate();
+                });
     }
 
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
@@ -179,6 +396,9 @@ public class Maps extends Fragment {
                         double userLat = location.getLatitude();
                         double userLng = location.getLongitude();
 
+                        lastKnownLat = userLat;
+                        lastKnownLng = userLng;
+
                         GeoPoint userPoint = new GeoPoint(userLat, userLng);
 
                         mapController.setCenter(userPoint);
@@ -187,6 +407,7 @@ public class Maps extends Fragment {
                         showUserMarker(userPoint);
                         loadVets(userLat, userLng);
                         loadFeedSellers(userLat, userLng);
+                        loadApprovedVetPins();
                     }
                 });
     }
@@ -245,10 +466,8 @@ public class Maps extends Fragment {
 
         sortVetsByNearest(vets, userLat, userLng);
 
-        Drawable icon = ContextCompat.getDrawable(
-                getActivity(),
-                org.osmdroid.library.R.drawable.marker_default
-        );
+        Drawable icon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
+        Drawable nearestIcon = makeScaledIcon(R.drawable.pin_vet, 96, 130, true);
 
         FolderOverlay vetLayer = new FolderOverlay(getActivity());
         mapView.getOverlays().add(vetLayer);
@@ -264,11 +483,12 @@ public class Maps extends Fragment {
 
             if (i == 0) {
                 marker.setSnippet("NEAREST VETERINARY CLINIC");
+                marker.setIcon(nearestIcon);
             } else {
                 marker.setSnippet("Veterinary Clinic");
+                marker.setIcon(icon);
             }
 
-            marker.setIcon(icon);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
             vetLayer.add(marker);
@@ -292,10 +512,8 @@ public class Maps extends Fragment {
 
         computeFeedDistances(feeds, userLat, userLng);
 
-        Drawable feedIcon = ContextCompat.getDrawable(
-                getActivity(),
-                org.osmdroid.library.R.drawable.marker_default
-        );
+        Drawable feedIcon = makeScaledIcon(R.drawable.pin_feed_seller, 96, 130);
+        Drawable nearestFeedIcon = makeScaledIcon(R.drawable.pin_feed_seller, 96, 130, true);
 
         FolderOverlay feedLayer = new FolderOverlay(getActivity());
         mapView.getOverlays().add(feedLayer);
@@ -311,15 +529,55 @@ public class Maps extends Fragment {
 
             if (i == 0) {
                 marker.setSnippet("NEAREST FEED STORE");
+                marker.setIcon(nearestFeedIcon);
             } else {
                 marker.setSnippet("Agrivet / Feed Store");
+                marker.setIcon(feedIcon);
             }
 
-            marker.setIcon(feedIcon);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
             feedLayer.add(marker);
         }
+    }
+
+    private Drawable makeScaledIcon(int drawableRes, int widthPx, int heightPx) {
+        return makeScaledIcon(drawableRes, widthPx, heightPx, false);
+    }
+
+    private Drawable makeScaledIcon(int drawableRes, int widthPx, int heightPx, boolean highlightNearest) {
+        Bitmap bitmap = BitmapFactory.decodeResource(getResources(), drawableRes);
+        Bitmap scaled = Bitmap.createScaledBitmap(bitmap, widthPx, heightPx, true);
+
+        if (highlightNearest) {
+            scaled = addRedBorder(scaled);
+        }
+
+        return new BitmapDrawable(getResources(), scaled);
+    }
+
+    private Bitmap addRedBorder(Bitmap src) {
+        float borderWidth = 8f;
+
+        Bitmap bordered = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bordered);
+        canvas.drawBitmap(src, 0, 0, null);
+
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setColor(Color.RED);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(borderWidth);
+
+        canvas.drawRect(
+                borderWidth / 2f,
+                borderWidth / 2f,
+                src.getWidth() - borderWidth / 2f,
+                src.getHeight() - borderWidth / 2f,
+                paint
+        );
+
+        return bordered;
     }
 
     private void requestPermissionsIfNecessary(String[] permissions) {

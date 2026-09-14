@@ -90,19 +90,14 @@
                         android:textStyle="bold"
                         android:letterSpacing="0.08" />
 
-                    <EditText
-                        android:id="@+id/editBreed"
+                    <Spinner
+                        android:id="@+id/spinnerBreed"
                         android:layout_width="match_parent"
                         android:layout_height="42dp"
                         android:layout_marginTop="6dp"
                         android:background="@drawable/rabbit_input_bg"
-                        android:hint="Breed"
                         android:paddingStart="14dp"
-                        android:paddingEnd="10dp"
-                        android:singleLine="true"
-                        android:textColor="@color/black"
-                        android:textColorHint="#77705F"
-                        android:textSize="13sp" />
+                        android:paddingEnd="10dp" />
 
                 </LinearLayout>
 
@@ -131,8 +126,8 @@
                         android:layout_height="42dp"
                         android:layout_marginTop="6dp"
                         android:background="@drawable/rabbit_input_bg"
-                        android:hint="e.g. 1.5 yrs"
-                        android:inputType="text"
+                        android:hint="e.g. 6"
+                        android:inputType="number"
                         android:paddingStart="14dp"
                         android:paddingEnd="10dp"
                         android:singleLine="true"
@@ -257,7 +252,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="LAST WATER"
+                        android:text="LAST HYDRATED"
                         android:textColor="@color/black"
                         android:textSize="11sp"
                         android:textStyle="bold"

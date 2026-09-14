@@ -46,7 +46,7 @@ public class Community extends Fragment {
     Uri selectedUri;
 
     List<posts> postList;
-    List<posts> fullPostList; // unfiltered master list used for search
+    List<posts> fullPostList;
     PostsAdapter adapter;
 
     @Override
@@ -123,7 +123,6 @@ public class Community extends Fragment {
                         }
                     }
 
-                    // Re-apply whatever search filter is currently active
                     EditText searchInput = view.findViewById(R.id.searchInput);
                     String currentQuery = (searchInput != null)
                             ? searchInput.getText().toString()
@@ -291,10 +290,6 @@ public class Community extends Fragment {
         });
     }
 
-    /**
-     * Hooks up the search EditText in the header to live-filter posts
-     * as the user types.
-     */
     private void setupSearch(View view) {
 
         EditText searchInput = view.findViewById(R.id.searchInput);
@@ -318,10 +313,6 @@ public class Community extends Fragment {
         });
     }
 
-    /**
-     * Filters fullPostList by post text or poster name and refreshes the
-     * RecyclerView via postList/adapter.
-     */
     private void filterPosts(String query) {
 
         if (fullPostList == null || postList == null || adapter == null) {
