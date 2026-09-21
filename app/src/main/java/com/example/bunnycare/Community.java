@@ -191,7 +191,7 @@ public class Community extends Fragment {
                                 .trim();
 
                 String comment =
-                        filterProfanity(rawComment);
+                        ProfanityFilter.filter(rawComment);
 
                 Uri uri = selectedUri;
 
@@ -367,6 +367,8 @@ public class Community extends Fragment {
 
                             String profileImageUrl = "";
 
+                            boolean posterVerified = false;
+
                             if (documentSnapshot.exists()) {
 
                                 String fetchedUsername =
@@ -391,6 +393,12 @@ public class Community extends Fragment {
                                 if (fetchedImageUrl != null) {
                                     profileImageUrl = fetchedImageUrl;
                                 }
+
+                                Boolean fetchedVerified =
+                                        documentSnapshot.getBoolean("verified");
+
+                                posterVerified =
+                                        fetchedVerified != null && fetchedVerified;
                             }
 
                             Map<String, Object> post =
@@ -422,6 +430,11 @@ public class Community extends Fragment {
                             );
 
                             post.put(
+                                    "verified",
+                                    posterVerified
+                            );
+
+                            post.put(
                                     "likesCount",
                                     0
                             );
@@ -450,47 +463,5 @@ public class Community extends Fragment {
                                             }
                                     );
                         });
-    }
-
-    private String filterProfanity(
-            String text
-    ) {
-
-        if (text == null) {
-            return "";
-        }
-
-        String[] badWords = {
-                "fuck",
-                "shit",
-                "bitch",
-                "asshole",
-                "damn",
-                "motherfucker",
-                "bastard",
-        };
-
-        String filtered = text;
-
-        for (String word : badWords) {
-
-            String regex =
-                    "(?i)\\b"
-                            + word
-                            + "\\b";
-
-            String replacement =
-                    new String(
-                            new char[word.length()]
-                    ).replace('\0', '*');
-
-            filtered =
-                    filtered.replaceAll(
-                            regex,
-                            replacement
-                    );
-        }
-
-        return filtered;
     }
 }

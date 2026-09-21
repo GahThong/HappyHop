@@ -12,7 +12,11 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.preference.PreferenceManager;
+import android.view.Gravity;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -75,9 +79,12 @@ public class Maps extends Fragment {
     private FirebaseUser currentUser;
     private boolean isVerifiedVet = false;
 
-    private FolderOverlay approvedVetPinLayer;
-    private FolderOverlay myPendingPinLayer;
+    private FolderOverlay approvedPinLayer;
     private double lastKnownLat, lastKnownLng;
+
+    private static final String TYPE_VET = "vet";
+    private static final String TYPE_FEED = "feed";
+    private static final String[] PIN_TYPE_LABELS = {"Vet Clinic", "Feed Supplier"};
 
     class Vet {
         double lat, lng;
@@ -184,8 +191,6 @@ public class Maps extends Fragment {
                     if (doc.exists() && Boolean.TRUE.equals(doc.getBoolean("verified"))) {
                         isVerifiedVet = true;
                     }
-
-                    loadMyPendingPin();
                 });
     }
 
@@ -198,47 +203,75 @@ public class Maps extends Fragment {
 
         if (!isVerifiedVet) {
             Toast.makeText(getContext(),
-                    "Only verified vets can add a clinic pin. Verify your account from your profile first.",
+                    "Only verified vets can add a pin. Verify your account from your profile first.",
                     Toast.LENGTH_LONG).show();
             return;
         }
 
-        promptAddVetPin(point);
+        promptAddPin(point);
     }
 
-    private void promptAddVetPin(GeoPoint point) {
+    private void promptAddPin(GeoPoint point) {
 
-        EditText input = new EditText(getContext());
-        input.setHint("Clinic name");
+        int paddingPx = (int) (16 * getResources().getDisplayMetrics().density);
+
+        LinearLayout layout = new LinearLayout(getContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
+
+        EditText nameInput = new EditText(getContext());
+        nameInput.setHint("Clinic / store name");
+        layout.addView(nameInput);
+
+        Spinner typeSpinner = new Spinner(getContext());
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                getContext(),
+                android.R.layout.simple_spinner_dropdown_item,
+                PIN_TYPE_LABELS
+        );
+        typeSpinner.setAdapter(adapter);
+
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        spinnerParams.topMargin = paddingPx;
+        typeSpinner.setLayoutParams(spinnerParams);
+        typeSpinner.setGravity(Gravity.CENTER_VERTICAL);
+        layout.addView(typeSpinner);
 
         new AlertDialog.Builder(getContext())
-                .setTitle("Add Vet Clinic Pin")
-                .setMessage("This pin will be reviewed by an admin before it appears on the public map.")
-                .setView(input)
+                .setTitle("Add Pin")
+                .setMessage("Your pin will appear on the map immediately.")
+                .setView(layout)
                 .setPositiveButton("Submit", (dialog, which) -> {
 
-                    String clinicName = input.getText().toString().trim();
+                    String name = nameInput.getText().toString().trim();
 
-                    if (clinicName.isEmpty()) {
-                        Toast.makeText(getContext(), "Please enter a clinic name", Toast.LENGTH_SHORT).show();
+                    if (name.isEmpty()) {
+                        Toast.makeText(getContext(), "Please enter a name", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
-                    submitVetPin(point, clinicName);
+                    int selectedIndex = typeSpinner.getSelectedItemPosition();
+                    String type = (selectedIndex == 1) ? TYPE_FEED : TYPE_VET;
+
+                    submitPin(point, name, type);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
-    private void submitVetPin(GeoPoint point, String clinicName) {
+    private void submitPin(GeoPoint point, String name, String type) {
 
         Map<String, Object> pin = new HashMap<>();
         pin.put("vetId", currentUser.getUid());
         pin.put("vetName", currentUser.getDisplayName());
-        pin.put("clinicName", clinicName);
+        pin.put("clinicName", name);
+        pin.put("type", type);
         pin.put("latitude", point.getLatitude());
         pin.put("longitude", point.getLongitude());
-        pin.put("status", "pending");
+        pin.put("status", "approved");
         pin.put("submittedAt", FieldValue.serverTimestamp());
 
         db.collection("vetPins")
@@ -248,10 +281,8 @@ public class Maps extends Fragment {
                     if (getContext() == null) return;
 
                     Toast.makeText(getContext(),
-                            "Pin submitted. It'll appear on the map once an admin approves it.",
-                            Toast.LENGTH_LONG).show();
-
-                    loadMyPendingPin();
+                            "Pin added to the map.",
+                            Toast.LENGTH_SHORT).show();
                 })
                 .addOnFailureListener(e -> {
 
@@ -262,50 +293,7 @@ public class Maps extends Fragment {
                 });
     }
 
-    private void loadMyPendingPin() {
-
-        if (currentUser == null || !isVerifiedVet) return;
-
-        db.collection("vetPins")
-                .whereEqualTo("vetId", currentUser.getUid())
-                .whereEqualTo("status", "pending")
-                .addSnapshotListener((value, error) -> {
-
-                    if (error != null || value == null || getContext() == null || mapView == null) return;
-
-                    if (myPendingPinLayer != null) {
-                        mapView.getOverlays().remove(myPendingPinLayer);
-                    }
-
-                    myPendingPinLayer = new FolderOverlay(getActivity());
-                    mapView.getOverlays().add(myPendingPinLayer);
-
-                    Drawable icon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
-
-                    for (DocumentSnapshot doc : value.getDocuments()) {
-
-                        Double lat = doc.getDouble("latitude");
-                        Double lng = doc.getDouble("longitude");
-                        String clinicName = doc.getString("clinicName");
-
-                        if (lat == null || lng == null) continue;
-
-                        Marker marker = new Marker(mapView);
-                        marker.setPosition(new GeoPoint(lat, lng));
-                        marker.setTitle("⏳ " + (clinicName != null ? clinicName : "Your clinic"));
-                        marker.setSnippet("Pending admin approval — only visible to you");
-                        marker.setIcon(icon);
-                        marker.setAlpha(0.5f);
-                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-                        myPendingPinLayer.add(marker);
-                    }
-
-                    mapView.invalidate();
-                });
-    }
-
-    private void loadApprovedVetPins() {
+    private void loadApprovedPins() {
 
         db.collection("vetPins")
                 .whereEqualTo("status", "approved")
@@ -313,31 +301,42 @@ public class Maps extends Fragment {
 
                     if (error != null || value == null || getContext() == null || mapView == null) return;
 
-                    if (approvedVetPinLayer != null) {
-                        mapView.getOverlays().remove(approvedVetPinLayer);
+                    if (approvedPinLayer != null) {
+                        mapView.getOverlays().remove(approvedPinLayer);
                     }
 
-                    approvedVetPinLayer = new FolderOverlay(getActivity());
-                    mapView.getOverlays().add(approvedVetPinLayer);
+                    approvedPinLayer = new FolderOverlay(getActivity());
+                    mapView.getOverlays().add(approvedPinLayer);
 
-                    Drawable icon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
+                    Drawable vetIcon = makeScaledIcon(R.drawable.pin_vet, 96, 130);
+                    Drawable feedIcon = makeScaledIcon(R.drawable.pin_feed_seller, 96, 130);
 
                     for (DocumentSnapshot doc : value.getDocuments()) {
 
                         Double lat = doc.getDouble("latitude");
                         Double lng = doc.getDouble("longitude");
                         String clinicName = doc.getString("clinicName");
+                        String type = doc.getString("type");
+                        boolean isFeed = TYPE_FEED.equals(type);
 
                         if (lat == null || lng == null) continue;
 
                         Marker marker = new Marker(mapView);
                         marker.setPosition(new GeoPoint(lat, lng));
-                        marker.setTitle("🐾 Vet: " + (clinicName != null ? clinicName : "Verified Clinic"));
-                        marker.setSnippet("Verified Veterinary Clinic");
-                        marker.setIcon(icon);
+
+                        if (isFeed) {
+                            marker.setTitle("🌾 Feed Seller: " + (clinicName != null ? clinicName : "Verified Feed Store"));
+                            marker.setSnippet("Verified Feed Supplier");
+                            marker.setIcon(feedIcon);
+                        } else {
+                            marker.setTitle("🐾 Vet: " + (clinicName != null ? clinicName : "Verified Clinic"));
+                            marker.setSnippet("Verified Veterinary Clinic");
+                            marker.setIcon(vetIcon);
+                        }
+
                         marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
-                        approvedVetPinLayer.add(marker);
+                        approvedPinLayer.add(marker);
                     }
 
                     mapView.invalidate();
@@ -368,10 +367,11 @@ public class Maps extends Fragment {
         vets.sort((a, b) -> Double.compare(a.distance, b.distance));
     }
 
-    private void computeFeedDistances(List<FeedSeller> feeds, double userLat, double userLng) {
+    private void sortFeedsByNearest(List<FeedSeller> feeds, double userLat, double userLng) {
         for (FeedSeller f : feeds) {
             f.distance = distanceMeters(userLat, userLng, f.lat, f.lng);
         }
+        feeds.sort((a, b) -> Double.compare(a.distance, b.distance));
     }
 
     private void getCurrentLocation() {
@@ -407,7 +407,7 @@ public class Maps extends Fragment {
                         showUserMarker(userPoint);
                         loadVets(userLat, userLng);
                         loadFeedSellers(userLat, userLng);
-                        loadApprovedVetPins();
+                        loadApprovedPins();
                     }
                 });
     }
@@ -510,7 +510,7 @@ public class Maps extends Fragment {
         feeds.add(new FeedSeller(14.662287396654012, 120.56529244192595, "RC's Animal Feeds Trading"));
         feeds.add(new FeedSeller(14.592451964805823, 120.5878109546487, "BFF PET AND POULTRY SUPPLIES"));
 
-        computeFeedDistances(feeds, userLat, userLng);
+        sortFeedsByNearest(feeds, userLat, userLng);
 
         Drawable feedIcon = makeScaledIcon(R.drawable.pin_feed_seller, 96, 130);
         Drawable nearestFeedIcon = makeScaledIcon(R.drawable.pin_feed_seller, 96, 130, true);

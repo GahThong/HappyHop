@@ -1,6 +1,7 @@
 package com.example.bunnycare;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +15,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -59,7 +61,24 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
         String postId = post.getId();
 
         holder.userName.setText(post.getPosterName());
-        holder.description.setText(post.getPost());
+
+        int badgeSizePx = (int) (14 * context.getResources().getDisplayMetrics().density);
+
+        if (post.isVerified()) {
+            Drawable verifiedBadge = ContextCompat.getDrawable(context, R.drawable.verified);
+            if (verifiedBadge != null) {
+                verifiedBadge.setBounds(0, 0, badgeSizePx, badgeSizePx);
+            }
+            holder.userName.setCompoundDrawables(null, null, verifiedBadge, null);
+        } else {
+            holder.userName.setCompoundDrawables(null, null, null, null);
+        }
+
+        holder.description.setText(
+                post.getPost() != null
+                        ? ProfanityFilter.filter(post.getPost())
+                        : ""
+        );
         holder.likeCount.setText(String.valueOf(post.getLikesCount()));
         holder.commentCount.setText(String.valueOf(post.getCommentCount()));
 
@@ -195,7 +214,6 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                     });
         });
 
-        // 3-dot menu: Report for everyone, Edit/Delete only for the post's owner
         holder.menuBtn.setOnClickListener(v -> {
 
             PopupMenu popup = new PopupMenu(context, v);
@@ -275,7 +293,19 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                         for (DocumentSnapshot doc :
                                 value.getDocuments()) {
 
-                            commentList.add(doc.getData());
+                            Map<String, Object> data = doc.getData();
+
+                            if (data != null) {
+
+                                Object commentText = data.get("text");
+
+                                if (commentText instanceof String) {
+                                    data.put("text",
+                                            ProfanityFilter.filter((String) commentText));
+                                }
+
+                                commentList.add(data);
+                            }
                         }
 
                         adapter.notifyDataSetChanged();
@@ -283,10 +313,12 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
 
             send.setOnClickListener(v1 -> {
 
-                String text =
+                String rawText =
                         input.getText().toString().trim();
 
-                if (text.isEmpty() || user == null) return;
+                if (rawText.isEmpty() || user == null) return;
+
+                String text = ProfanityFilter.filter(rawText);
 
                 String uid = user.getUid();
 
@@ -492,7 +524,7 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                 .setView(input)
                 .setPositiveButton("Save", (dialog, which) -> {
 
-                    String newText = input.getText().toString().trim();
+                    String newText = ProfanityFilter.filter(input.getText().toString().trim());
 
                     if (newText.isEmpty()) {
                         Toast.makeText(context, "Post can't be empty", Toast.LENGTH_SHORT).show();
@@ -543,10 +575,6 @@ public class PostsAdapter extends RecyclerView.Adapter<PostsAdapter.ViewHolder> 
                 .show();
     }
 
-    /**
-     * Turns a millisecond timestamp into "Just now", "5 minutes ago",
-     * "1 day ago", "1 week ago", "2 months ago", "1 year ago", etc.
-     */
     private static String getRelativeTime(long timeMillis) {
 
         long diff = System.currentTimeMillis() - timeMillis;

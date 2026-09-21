@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.text.LineBreaker;
 import android.media.ThumbnailUtils;
@@ -18,9 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.text.Layout;
 import android.text.Spannable;
-import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.method.LinkMovementMethod;
 import android.text.style.BackgroundColorSpan;
@@ -65,14 +64,18 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.tensorflow.lite.support.image.TensorImage;
+import org.tensorflow.lite.support.label.Category;
 import org.tensorflow.lite.task.core.BaseOptions;
 import org.tensorflow.lite.task.vision.classifier.Classifications;
 import org.tensorflow.lite.task.vision.classifier.ImageClassifier;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
+import java.util.AbstractMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -80,10 +83,9 @@ public class Camera extends Fragment {
 
     int imageSize = 224;
 
-    static final float RABBIT_PRESENCE_THRESHOLD = 0.95f;
-    static final float DISEASE_REPORT_THRESHOLD = 0.97f;
-    static final float DISEASE_MIN_MARGIN = 0.20f;
-    static final float MYXOMATOSIS_REPORT_THRESHOLD = 0.995f;
+    // Breed (local ML) thresholds
+    static final float RABBIT_PRESENCE_THRESHOLD = 0.99f;
+    static final float BREED_MIN_MARGIN = 0.1f;
 
     static final String NO_ILLNESS_LABEL = "No signs of illness detected";
 
@@ -94,6 +96,7 @@ public class Camera extends Fragment {
             "Lionhead"
     };
 
+    // Used only for the Gemini prompt and disease info text
     String[] diseaseLabels = {
             "Myxomatosis",
             "Mites",
@@ -101,48 +104,38 @@ public class Camera extends Fragment {
             "Pasteurellosis"
     };
 
-    String[] featureNames = {
-            "Legs",
-            "Arms",
-            "Ears",
-            "Nose",
-            "Fur",
-            "Tail"
-    };
-
     ActivityResultLauncher<Void> takePictureLauncher;
-    ActivityResultLauncher<Void> featureCameraLauncher;
     ActivityResultLauncher<String> mainImagePickerLauncher;
-    ActivityResultLauncher<String> featurePickerLauncher;
     ActivityResultLauncher<String> permissionLauncher;
-
-    boolean pendingFeatureCameraCapture = false;
 
     Executor geminiExecutor = Executors.newSingleThreadExecutor();
 
     Bitmap lastOriginalImage;
-    List<Bitmap> featureImages = new ArrayList<>();
-    int currentFeatureIndex = 0;
 
     private PopupWindow geminiTipPopup;
-
+    private AlertDialog loadingDialog;
     private View statusBadge;
     private View statusDot;
     private TextView txtStatus;
-
     private LinearLayout yourRabbitsRow;
     private FirebaseFirestore db;
-
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
 
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(
+            @NonNull LayoutInflater inflater,
+            ViewGroup container,
+            Bundle savedInstanceState
+    ) {
         return inflater.inflate(R.layout.fragment_camera, container, false);
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+    public void onViewCreated(
+            @NonNull View view,
+            @Nullable Bundle savedInstanceState
+    ) {
 
         Button btnOpenCamera = view.findViewById(R.id.btnOpenCamera);
         Button btnUploadPhoto = view.findViewById(R.id.btnUploadPhoto);
@@ -158,13 +151,15 @@ public class Camera extends Fragment {
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
                     if (isGranted) {
-                        if (pendingFeatureCameraCapture) {
-                            featureCameraLauncher.launch(null);
-                        } else {
-                            takePictureLauncher.launch(null);
-                        }
+                        showPictureGuidelinesOverlay(
+                                () -> takePictureLauncher.launch(null)
+                        );
                     } else {
-                        Toast.makeText(requireContext(), "Permission denied", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(
+                                requireContext(),
+                                "Permission denied",
+                                Toast.LENGTH_SHORT
+                        ).show();
                     }
                 }
         );
@@ -173,7 +168,11 @@ public class Camera extends Fragment {
                 new ActivityResultContracts.TakePicturePreview(),
                 image -> {
                     if (image == null) {
-                        Toast.makeText(requireContext(), "No image captured", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(
+                                requireContext(),
+                                "No image captured",
+                                Toast.LENGTH_SHORT
+                        ).show();
                         return;
                     }
 
@@ -186,14 +185,22 @@ public class Camera extends Fragment {
                 new ActivityResultContracts.GetContent(),
                 uri -> {
                     if (uri == null) {
-                        Toast.makeText(requireContext(), "No image selected", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(
+                                requireContext(),
+                                "No image selected",
+                                Toast.LENGTH_SHORT
+                        ).show();
                         return;
                     }
 
                     Bitmap bitmap = loadBitmapFromUri(uri);
 
                     if (bitmap == null) {
-                        Toast.makeText(requireContext(), "Couldn't load that image, please try another", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(
+                                requireContext(),
+                                "Couldn't load that image, please try another",
+                                Toast.LENGTH_SHORT
+                        ).show();
                         return;
                     }
 
@@ -202,45 +209,15 @@ public class Camera extends Fragment {
                 }
         );
 
-        featurePickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.GetContent(),
-                uri -> {
-                    if (uri == null) {
-                        Toast.makeText(requireContext(), "No image selected, skipping this feature", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Bitmap bitmap = loadBitmapFromUri(uri);
-
-                        if (bitmap != null) {
-                            featureImages.add(bitmap);
-                        } else {
-                            Toast.makeText(requireContext(), "Couldn't load that image, skipping this feature", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-
-                    currentFeatureIndex++;
-                    promptNextFeatureOrRun();
-                }
-        );
-
-        featureCameraLauncher = registerForActivityResult(
-                new ActivityResultContracts.TakePicturePreview(),
-                image -> {
-                    if (image == null) {
-                        Toast.makeText(requireContext(), "No image captured, skipping this feature", Toast.LENGTH_SHORT).show();
-                    } else {
-                        featureImages.add(image);
-                    }
-
-                    currentFeatureIndex++;
-                    promptNextFeatureOrRun();
-                }
-        );
-
         btnOpenCamera.setOnClickListener(v -> openCamera());
-        btnUploadPhoto.setOnClickListener(v -> mainImagePickerLauncher.launch("image/*"));
+
+        btnUploadPhoto.setOnClickListener(v ->
+                showPictureGuidelinesOverlay(
+                        () -> mainImagePickerLauncher.launch("image/*")
+                )
+        );
 
         setupConnectivityMonitoring();
-
         loadUserRabbits();
     }
 
@@ -291,25 +268,22 @@ public class Camera extends Fragment {
     private View buildRabbitItemView(Rabbit rabbit) {
 
         LinearLayout item = new LinearLayout(requireContext());
-        item.setOrientation(LinearLayout.VERTICAL);
-        item.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
 
-        LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        LinearLayout.LayoutParams itemParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
 
         itemParams.setMarginEnd(dpToPx(14));
         item.setLayoutParams(itemParams);
 
         ImageView thumb = new ImageView(requireContext());
 
-        LinearLayout.LayoutParams thumbParams = new LinearLayout.LayoutParams(
-                dpToPx(78),
-                dpToPx(78)
-        );
-
-        thumb.setLayoutParams(thumbParams);
+        thumb.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(78), dpToPx(78)));
         thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
         String imageUrl = rabbit.getImageUrl();
@@ -331,10 +305,11 @@ public class Camera extends Fragment {
 
         TextView name = new TextView(requireContext());
 
-        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
+        LinearLayout.LayoutParams nameParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
 
         nameParams.topMargin = dpToPx(6);
         name.setLayoutParams(nameParams);
@@ -357,8 +332,10 @@ public class Camera extends Fragment {
         item.setOnClickListener(v -> {
 
             Intent intent = new Intent(requireActivity(), AddRabbitActivity.class);
+
             intent.putExtra("editMode", true);
             intent.putExtra("rabbitId", rabbit.getId());
+
             startActivity(intent);
         });
 
@@ -398,18 +375,26 @@ public class Camera extends Fragment {
 
             int end = index + target.length();
 
-            sb.setSpan(new ForegroundColorSpan(RED), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            sb.setSpan(new BackgroundColorSpan(RED_HIGHLIGHT), index, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new ForegroundColorSpan(RED), index, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), index, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new BackgroundColorSpan(RED_HIGHLIGHT), index, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
 
             index = text.indexOf(target, end);
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Connectivity
+    // ---------------------------------------------------------------------
+
     private void setupConnectivityMonitoring() {
 
-        connectivityManager = (ConnectivityManager)
-                requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        connectivityManager =
+                (ConnectivityManager) requireContext()
+                        .getSystemService(Context.CONNECTIVITY_SERVICE);
 
         if (connectivityManager == null) {
             updateStatusBadge(false);
@@ -418,18 +403,17 @@ public class Camera extends Fragment {
 
         updateStatusBadge(isCurrentlyOnline());
 
-        NetworkRequest request = new NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build();
+        NetworkRequest request =
+                new NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build();
 
         networkCallback = new ConnectivityManager.NetworkCallback() {
 
             @Override
             public void onAvailable(@NonNull Network network) {
                 if (isAdded()) {
-                    requireActivity().runOnUiThread(() ->
-                            updateStatusBadge(true)
-                    );
+                    requireActivity().runOnUiThread(() -> updateStatusBadge(true));
                 }
             }
 
@@ -437,8 +421,7 @@ public class Camera extends Fragment {
             public void onLost(@NonNull Network network) {
                 if (isAdded()) {
                     requireActivity().runOnUiThread(() ->
-                            updateStatusBadge(isCurrentlyOnline())
-                    );
+                            updateStatusBadge(isCurrentlyOnline()));
                 }
             }
 
@@ -453,9 +436,7 @@ public class Camera extends Fragment {
                             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                                     && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
 
-                    requireActivity().runOnUiThread(() ->
-                            updateStatusBadge(online)
-                    );
+                    requireActivity().runOnUiThread(() -> updateStatusBadge(online));
                 }
             }
         };
@@ -507,6 +488,7 @@ public class Camera extends Fragment {
 
     @Override
     public void onDestroyView() {
+
         super.onDestroyView();
 
         if (connectivityManager != null && networkCallback != null) {
@@ -516,8 +498,10 @@ public class Camera extends Fragment {
         if (geminiTipPopup != null && geminiTipPopup.isShowing()) {
             geminiTipPopup.dismiss();
         }
-        geminiTipPopup = null;
 
+        dismissLoading();
+
+        geminiTipPopup = null;
         networkCallback = null;
         statusBadge = null;
         statusDot = null;
@@ -525,33 +509,18 @@ public class Camera extends Fragment {
         yourRabbitsRow = null;
     }
 
+    // ---------------------------------------------------------------------
+    // Camera / picking
+    // ---------------------------------------------------------------------
+
     private void openCamera() {
 
-        pendingFeatureCameraCapture = false;
-
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
                 Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED) {
 
-            takePictureLauncher.launch(null);
-
-        } else {
-
-            permissionLauncher.launch(Manifest.permission.CAMERA);
-        }
-    }
-
-    private void openCameraForFeature() {
-
-        pendingFeatureCameraCapture = true;
-
-        if (ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED) {
-
-            featureCameraLauncher.launch(null);
+            showPictureGuidelinesOverlay(() -> takePictureLauncher.launch(null));
 
         } else {
 
@@ -575,38 +544,128 @@ public class Camera extends Fragment {
         }
     }
 
+    private void showPictureGuidelinesOverlay(Runnable onProceed) {
+
+        if (getView() == null || !isAdded()) {
+
+            if (onProceed != null) {
+                onProceed.run();
+            }
+
+            return;
+        }
+
+        if (geminiTipPopup != null && geminiTipPopup.isShowing()) {
+            return;
+        }
+
+        Context context = requireContext();
+
+        LinearLayout container = new LinearLayout(context);
+
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setGravity(Gravity.CENTER);
+        container.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
+
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFFF8F5EA);
+        background.setCornerRadius(dpToPx(22));
+        background.setStroke(dpToPx(1), 0xFFE3DECF);
+
+        container.setBackground(background);
+        container.setElevation(dpToPx(12));
+
+        ImageView guidelineImage = new ImageView(context);
+
+        guidelineImage.setImageResource(R.drawable.picture_guidelines);
+        guidelineImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        guidelineImage.setLayoutParams(
+                new LinearLayout.LayoutParams(dpToPx(360), dpToPx(300))
+        );
+
+        container.addView(guidelineImage);
+
+        Button continueButton = new Button(context);
+
+        continueButton.setText("Continue");
+        continueButton.setTextSize(15f);
+        continueButton.setTextColor(Color.WHITE);
+        continueButton.setAllCaps(false);
+
+        GradientDrawable continueBackground = new GradientDrawable();
+        continueBackground.setColor(0xFF3A7D44);
+        continueBackground.setCornerRadius(dpToPx(12));
+
+        continueButton.setBackground(continueBackground);
+        continueButton.setPadding(dpToPx(28), dpToPx(8), dpToPx(28), dpToPx(8));
+
+        LinearLayout.LayoutParams buttonParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        buttonParams.gravity = Gravity.END;
+        buttonParams.topMargin = dpToPx(4);
+        buttonParams.bottomMargin = dpToPx(8);
+        buttonParams.rightMargin = dpToPx(8);
+
+        continueButton.setLayoutParams(buttonParams);
+
+        container.addView(continueButton);
+
+        PopupWindow popupWindow =
+                new PopupWindow(
+                        container,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        true
+                );
+
+        popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popupWindow.setOutsideTouchable(false);
+        popupWindow.setFocusable(true);
+
+        geminiTipPopup = popupWindow;
+
+        continueButton.setOnClickListener(v -> {
+
+            popupWindow.dismiss();
+
+            if (onProceed != null) {
+                onProceed.run();
+            }
+        });
+
+        popupWindow.setOnDismissListener(() -> {
+            if (geminiTipPopup == popupWindow) {
+                geminiTipPopup = null;
+            }
+        });
+
+        popupWindow.showAtLocation(getView(), Gravity.CENTER, 0, 0);
+    }
+
+    // ---------------------------------------------------------------------
+    // Step 1: BREED via local ML model
+    // ---------------------------------------------------------------------
+
     private void runLocalClassification(Bitmap image) {
 
-        Bitmap processedImage =
-                image.copy(Bitmap.Config.ARGB_8888, true);
+        Bitmap processedImage = image.copy(Bitmap.Config.ARGB_8888, true);
 
-        int dimension =
-                Math.min(
-                        processedImage.getWidth(),
-                        processedImage.getHeight()
-                );
+        int dimension = Math.min(processedImage.getWidth(), processedImage.getHeight());
 
-        processedImage =
-                ThumbnailUtils.extractThumbnail(
-                        processedImage,
-                        dimension,
-                        dimension
-                );
-
-        processedImage =
-                Bitmap.createScaledBitmap(
-                        processedImage,
-                        imageSize,
-                        imageSize,
-                        false
-                );
+        processedImage = ThumbnailUtils.extractThumbnail(processedImage, dimension, dimension);
+        processedImage = Bitmap.createScaledBitmap(processedImage, imageSize, imageSize, false);
 
         try {
 
             ImageClassifier.ImageClassifierOptions breedOptions =
-                    ImageClassifier.ImageClassifierOptions.builder()
+                    ImageClassifier.ImageClassifierOptions
+                            .builder()
                             .setBaseOptions(BaseOptions.builder().build())
-                            .setMaxResults(1)
+                            .setMaxResults(breedLabels.length)
                             .setScoreThreshold(0.01f)
                             .build();
 
@@ -618,9 +677,7 @@ public class Camera extends Fragment {
                     );
 
             List<Classifications> breedResults =
-                    breedClassifier.classify(
-                            TensorImage.fromBitmap(processedImage)
-                    );
+                    breedClassifier.classify(TensorImage.fromBitmap(processedImage));
 
             if (breedResults == null
                     || breedResults.isEmpty()
@@ -630,21 +687,42 @@ public class Camera extends Fragment {
                 return;
             }
 
-            Classifications breedClassification = breedResults.get(0);
+            List<Category> breedCategories = breedResults.get(0).getCategories();
 
-            float breedConfidence =
-                    breedClassification.getCategories().get(0).getScore();
+            int breedIndex = -1;
+            float breedConfidence = -1f;
+            float secondBestConfidence = -1f;
 
-            int breedIndex =
-                    breedClassification.getCategories().get(0).getIndex();
+            for (Category category : breedCategories) {
 
-            if (breedConfidence < RABBIT_PRESENCE_THRESHOLD) {
+                float score = category.getScore();
+
+                if (score > breedConfidence) {
+                    secondBestConfidence = breedConfidence;
+                    breedConfidence = score;
+                    breedIndex = category.getIndex();
+                } else if (score > secondBestConfidence) {
+                    secondBestConfidence = score;
+                }
+            }
+
+            if (secondBestConfidence < 0f) {
+                secondBestConfidence = 0f;
+            }
+
+            boolean clearlyDecisive =
+                    (breedConfidence - secondBestConfidence) >= BREED_MIN_MARGIN;
+
+            if (breedIndex < 0
+                    || breedConfidence < RABBIT_PRESENCE_THRESHOLD
+                    || !clearlyDecisive) {
+
                 showNoRabbitDetectedDialog();
                 return;
             }
 
             String breedLabel =
-                    (breedIndex >= 0 && breedIndex < breedLabels.length)
+                    breedIndex < breedLabels.length
                             ? breedLabels[breedIndex]
                             : "Unknown";
 
@@ -653,67 +731,24 @@ public class Camera extends Fragment {
                 return;
             }
 
-            String diseaseLabel = NO_ILLNESS_LABEL;
-
-            try {
-
-                ImageClassifier.ImageClassifierOptions diseaseOptions =
-                        ImageClassifier.ImageClassifierOptions.builder()
-                                .setBaseOptions(BaseOptions.builder().build())
-                                .setMaxResults(1)
-                                .setScoreThreshold(0.01f)
-                                .build();
-
-                ImageClassifier diseaseClassifier =
-                        ImageClassifier.createFromFileAndOptions(
-                                requireContext(),
-                                "diseasemodel.tflite",
-                                diseaseOptions
-                        );
-
-                List<Classifications> diseaseResults =
-                        diseaseClassifier.classify(
-                                TensorImage.fromBitmap(processedImage)
-                        );
-
-                if (diseaseResults != null
-                        && !diseaseResults.isEmpty()
-                        && !diseaseResults.get(0).getCategories().isEmpty()) {
-
-                    Classifications diseaseClassification = diseaseResults.get(0);
-
-                    float diseaseConfidence =
-                            diseaseClassification.getCategories().get(0).getScore();
-
-                    int diseaseIndex =
-                            diseaseClassification.getCategories().get(0).getIndex();
-
-                    if (diseaseConfidence >= DISEASE_REPORT_THRESHOLD
-                            && diseaseIndex >= 0
-                            && diseaseIndex < diseaseLabels.length) {
-
-                        String candidateLabel = diseaseLabels[diseaseIndex];
-
-                        boolean isMyxomatosis = candidateLabel.equalsIgnoreCase("Myxomatosis");
-
-                        if (!isMyxomatosis || diseaseConfidence >= MYXOMATOSIS_REPORT_THRESHOLD) {
-                            diseaseLabel = candidateLabel;
-                        }
-                    }
-                }
-
-            } catch (Exception e) {
-                Log.e("Camera", "Disease classification failed", e);
-            }
-
             String careInfo = getCareInfo(breedLabel);
 
-            String diseaseInfo =
-                    diseaseLabel.equals(NO_ILLNESS_LABEL)
-                            ? ""
-                            : getDiseaseInfo(diseaseLabel);
+            // Step 2: DISEASE via Gemini (needs internet)
+            if (isCurrentlyOnline()) {
 
-            showResultDialog(breedLabel, diseaseLabel, careInfo, diseaseInfo);
+                showLoading();
+                runGeminiDiseaseAnalysis(image, breedLabel, careInfo);
+
+            } else {
+
+                showResultDialog(
+                        breedLabel,
+                        "Unavailable (offline, connect to the internet for a health check)",
+                        "",
+                        careInfo,
+                        ""
+                );
+            }
 
         } catch (Exception e) {
 
@@ -729,343 +764,43 @@ public class Camera extends Fragment {
 
     private void showNoRabbitDetectedDialog() {
 
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setTitle("No Rabbit Detected")
-                .setMessage(
-                        "No rabbit could be detected in this picture. Please take or choose another picture with the rabbit clearly visible."
-                )
-                .setPositiveButton(
-                        "Take Picture Again",
-                        (d, which) -> openCamera()
-                )
-                .setNeutralButton(
-                        "Choose Photo",
-                        (d, which) -> mainImagePickerLauncher.launch("image/*")
-                )
-                .setNegativeButton(
-                        "Cancel",
-                        null
-                )
-                .show();
+        AlertDialog dialog =
+                new AlertDialog.Builder(requireContext())
+                        .setTitle("No Rabbit Detected")
+                        .setMessage("No rabbit could be detected in this picture. Please take or choose another picture with the rabbit clearly visible.")
+                        .setPositiveButton("Take Picture Again", (d, which) -> openCamera())
+                        .setNeutralButton("Choose Photo", (d, which) ->
+                                showPictureGuidelinesOverlay(
+                                        () -> mainImagePickerLauncher.launch("image/*")
+                                ))
+                        .setNegativeButton("Cancel", null)
+                        .show();
 
         styleDialogMessage(dialog);
     }
 
-    private void showGeminiNoRabbitDialog() {
+    // ---------------------------------------------------------------------
+    // Step 2: DISEASE via Gemini
+    // ---------------------------------------------------------------------
 
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setTitle("No Rabbit Detected")
-                .setMessage(
-                        "Gemini couldn't find a rabbit in the photo you provided. Please take or choose another picture with the rabbit clearly visible."
-                )
-                .setPositiveButton(
-                        "Take Picture",
-                        (d, which) -> openCamera()
-                )
-                .setNeutralButton(
-                        "Choose Photo",
-                        (d, which) -> mainImagePickerLauncher.launch("image/*")
-                )
-                .setNegativeButton(
-                        "Cancel",
-                        null
-                )
-                .show();
-
-        styleDialogMessage(dialog);
-    }
-
-    private void showResultDialog(
+    private void runGeminiDiseaseAnalysis(
+            Bitmap image,
             String breedLabel,
-            String diseaseLabel,
-            String careInfo,
-            String diseaseInfo
+            String careInfo
     ) {
 
-        SpannableStringBuilder message = new SpannableStringBuilder();
-
-        message.append("Breed: ").append(breedLabel).append("\n");
-        message.append("Health: ").append(diseaseLabel).append("\n\n");
-        message.append(careInfo);
-
-        if (!diseaseInfo.isEmpty()) {
-            message.append("\n\n").append(diseaseInfo);
-        }
-
-        highlightVetRequired(message);
-
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setTitle("Scan Results")
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-                .setNeutralButton(
-                        "Improve with Gemini",
-                        (d, which) -> startFeatureCaptureFlow()
-                )
-                .show();
-
-        styleDialogMessage(dialog);
-    }
-
-    private void startFeatureCaptureFlow() {
-
-        featureImages = new ArrayList<>();
-        currentFeatureIndex = 0;
-        showGeminiFeatureTipOverlay();
-    }
-
-    private void showGeminiFeatureTipOverlay() {
-
-        if (getView() == null || !isAdded()) {
-            promptNextFeatureOrRun();
-            return;
-        }
-
-        if (geminiTipPopup != null && geminiTipPopup.isShowing()) {
-            return;
-        }
-
-        Context context = requireContext();
-
-        LinearLayout card = new LinearLayout(context);
-        card.setOrientation(LinearLayout.VERTICAL);
-
-        int padding = dpToPx(20);
-        card.setPadding(padding, padding, padding, padding);
-
-        GradientDrawable cardBackground = new GradientDrawable();
-        cardBackground.setColor(0xFFFFFFFF);
-        cardBackground.setCornerRadius(dpToPx(18));
-        cardBackground.setStroke(dpToPx(1), 0xFFE3DECF);
-        card.setBackground(cardBackground);
-        card.setElevation(dpToPx(10));
-
-        TextView title = new TextView(context);
-        title.setText("Get better results with Gemini");
-        title.setTextSize(16f);
-        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        title.setTextColor(0xFF3A3226);
-        card.addView(title);
-
-        TextView message = new TextView(context);
-        message.setText(
-                "Before we continue, have close-up photos ready of the rabbit's "
-                        + buildFeatureListText()
-                        + ". Gemini uses these close-ups together with your original "
-                        + "photo to give a more accurate breed and health estimate."
-        );
-        message.setTextSize(14f);
-        message.setTextColor(0xFF5C5748);
-        message.setLineSpacing(dpToPx(2), 1f);
-
-        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
-                dpToPx(260),
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        messageParams.topMargin = dpToPx(10);
-        message.setLayoutParams(messageParams);
-        card.addView(message);
-
-        LinearLayout buttonRow = new LinearLayout(context);
-        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
-        buttonRow.setGravity(Gravity.END);
-
-        LinearLayout.LayoutParams buttonRowParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        buttonRowParams.topMargin = dpToPx(18);
-        buttonRow.setLayoutParams(buttonRowParams);
-
-        Button closeButton = new Button(context);
-        closeButton.setText("Close");
-        closeButton.setTextColor(0xFF5C5748);
-        closeButton.setBackground(null);
-        closeButton.setAllCaps(false);
-
-        Button readyButton = new Button(context);
-        readyButton.setText("Ready");
-        readyButton.setTextColor(0xFFFFFFFF);
-        readyButton.setAllCaps(false);
-
-        GradientDrawable readyBackground = new GradientDrawable();
-        readyBackground.setColor(0xFF3A7D44);
-        readyBackground.setCornerRadius(dpToPx(10));
-        readyButton.setBackground(readyBackground);
-
-        int readyHorizontalPad = dpToPx(18);
-        int readyVerticalPad = dpToPx(6);
-        readyButton.setPadding(readyHorizontalPad, readyVerticalPad, readyHorizontalPad, readyVerticalPad);
-
-        LinearLayout.LayoutParams readyParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        readyParams.setMarginStart(dpToPx(12));
-        readyButton.setLayoutParams(readyParams);
-
-        buttonRow.addView(closeButton);
-        buttonRow.addView(readyButton);
-
-        card.addView(buttonRow);
-
-        PopupWindow popupWindow = new PopupWindow(
-                card,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                true
-        );
-        popupWindow.setOutsideTouchable(true);
-        popupWindow.setFocusable(true);
-
-        geminiTipPopup = popupWindow;
-
-        closeButton.setOnClickListener(v -> popupWindow.dismiss());
-
-        readyButton.setOnClickListener(v -> {
-            popupWindow.dismiss();
-            promptNextFeatureOrRun();
-        });
-
-        popupWindow.setOnDismissListener(() -> {
-            if (geminiTipPopup == popupWindow) {
-                geminiTipPopup = null;
-            }
-        });
-
-        popupWindow.showAtLocation(getView(), Gravity.CENTER, 0, 0);
-    }
-
-    private String buildFeatureListText() {
-
-        StringBuilder builder = new StringBuilder();
-
-        for (int i = 0; i < featureNames.length; i++) {
-
-            String lowerName = featureNames[i].toLowerCase(Locale.ROOT);
-
-            if (i == 0) {
-                builder.append(lowerName);
-            } else if (i == featureNames.length - 1) {
-                builder.append(
-                        featureNames.length > 2 ? ", and " : " and "
-                ).append(lowerName);
-            } else {
-                builder.append(", ").append(lowerName);
-            }
-        }
-
-        return builder.toString();
-    }
-
-    private void promptNextFeatureOrRun() {
-
-        if (currentFeatureIndex < featureNames.length) {
-
-            String feature =
-                    featureNames[currentFeatureIndex];
-
-            String featureLower = feature.toLowerCase(Locale.ROOT);
-
-            String prefix = "Please choose a close-up photo of the rabbit's ";
-            String suffix = " from your gallery.";
-
-            SpannableString message = new SpannableString(prefix + featureLower + suffix);
-
-            int start = prefix.length();
-            int end = start + featureLower.length();
-
-            message.setSpan(
-                    new StyleSpan(android.graphics.Typeface.BOLD),
-                    start,
-                    end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-
-            new AlertDialog.Builder(requireContext())
-                    .setTitle("Better result with Gemini")
-                    .setMessage(message)
-                    .setCancelable(false)
-                    .setPositiveButton(
-                            "Choose Photo",
-                            (dialog, which) ->
-                                    featurePickerLauncher.launch("image/*")
-                    )
-                    .setNeutralButton(
-                            "Take Picture",
-                            (dialog, which) -> openCameraForFeature()
-                    )
-                    .setNegativeButton(
-                            "Skip",
-                            (dialog, which) -> {
-
-                                currentFeatureIndex++;
-                                promptNextFeatureOrRun();
-                            }
-                    )
-                    .show();
-
-        } else {
-
-            runGeminiRefinement();
-        }
-    }
-
-    private void runGeminiRefinement() {
-
-        if (lastOriginalImage == null) {
-
-            Toast.makeText(
-                    requireContext(),
-                    "Missing original photo, please try again",
-                    Toast.LENGTH_SHORT
-            ).show();
-
-            return;
-        }
-
-        Toast.makeText(
-                requireContext(),
-                "Analyzing with Gemini...",
-                Toast.LENGTH_SHORT
-        ).show();
-
         GenerativeModel firebaseAI =
-                FirebaseAI.getInstance(
-                        GenerativeBackend.googleAI()
-                ).generativeModel(
-                        "gemini-3.5-flash-lite"
-                );
+                FirebaseAI.getInstance(GenerativeBackend.googleAI())
+                        .generativeModel("gemini-3.5-flash-lite");
 
-        GenerativeModelFutures model =
-                GenerativeModelFutures.from(firebaseAI);
+        GenerativeModelFutures model = GenerativeModelFutures.from(firebaseAI);
 
-        String breedList =
-                String.join(", ", breedLabels);
-
-        String diseaseList =
-                String.join(", ", diseaseLabels) + ", Healthy";
-
-        String basePrompt =
-                "You are both a rabbit breed expert and a rabbit health expert. Analyze the overall photo plus "
-                        + "the close-up feature photos provided (each labeled) to identify BOTH the rabbit's breed "
-                        + "AND any visible disease or health condition in a single pass.\n\n"
-                        + "First, check whether a rabbit is actually present and clearly visible in the overall photo. "
-                        + "If no rabbit can be identified in the photo, do not guess a breed or disease and do not include "
-                        + "any confidences or care plan. Instead respond ONLY with this exact JSON and nothing else: "
-                        + "{\"breed\": \"No rabbit detected\"}\n\n"
-                        + "If a rabbit IS present, continue with the full analysis below.\n\n"
-                        + "For the breed, evaluate the rabbit against ALL recognized domestic rabbit breeds. "
-                        + "Return a percentage confidence for every breed that is reasonably plausible based on the photos. "
-                        + "Do not use categories such as \"Other\", \"Unknown\", \"Unidentified\", or \"Mixed\" as a breed. "
-                        + "If the rabbit does not match the provided breed list, identify the actual rabbit breed that it "
-                        + "most closely resembles and provide that breed's name. "
-                        + "If the rabbit appears to be a mix, provide the most likely actual breeds contributing to the mix "
-                        + "and assign estimated percentages to each. "
-                        + "Every breed name must be the name of an actual recognized rabbit breed. "
-                        + "The breed confidence percentages must add up to exactly 100.\n\n"
-                        + "For health, evaluate the rabbit against ALL known rabbit diseases and health conditions that "
-                        + "could potentially be identified from visible photographic signs. "
+        String prompt =
+                "You are a rabbit health expert. Analyze the rabbit photo provided and identify any visible "
+                        + "disease or health condition. Do NOT identify the breed.\n\n"
+                        + "Evaluate the rabbit against ALL known rabbit diseases and health conditions that could "
+                        + "potentially be identified from visible photographic signs. Prefer these names when they "
+                        + "apply: " + String.join(", ", diseaseLabels) + ", Healthy. "
                         + "Return a percentage likelihood for every relevant disease or health condition. "
                         + "Do not use \"Other\" or \"Unknown\" as a disease category. "
                         + "If there are no visible signs of illness, give \"Healthy\" the highest percentage. "
@@ -1074,84 +809,68 @@ public class Camera extends Fragment {
                         + "Only assign Myxomatosis a meaningfully high percentage if those specific signs are clearly visible; "
                         + "otherwise keep its percentage low and favor more common explanations (e.g. Healthy, Mites, "
                         + "Malocclusion, Pasteurellosis, or general skin/fur conditions). "
-                        + "The disease confidence percentages must add up to exactly 100.\n\n"
-                        + "Also write one short combined care plan covering diet, housing/exercise, breed-specific notes, "
-                        + "and any health guidance or warning signs based on what you found. "
+                        + "The disease confidence percentages must add up to exactly 100. "
                         + "This is general guidance only, not a substitute for veterinary diagnosis.\n\n"
                         + "Respond ONLY in JSON, no extra text, in this exact format: "
-                        + "{\"breed\": \"Holland Lop\", \"breed_confidences\": {\"Holland Lop\": 80, "
-                        + "\"Mini Lop\": 10, \"Netherland Dwarf\": 5, \"Lionhead\": 5}, "
-                        + "\"disease\": \"Healthy\", \"disease_confidences\": {\"Healthy\": 80, "
-                        + "\"Mites\": 5, \"Malocclusion\": 5, \"Pasteurellosis\": 5, \"Myxomatosis\": 5}, "
-                        + "\"care\": \"short combined care plan here\"}";
-
-        Content.Builder contentBuilder =
-                new Content.Builder()
-                        .addText(basePrompt)
-                        .addText("Overall photo:")
-                        .addImage(lastOriginalImage);
-
-        for (int i = 0; i < featureImages.size(); i++) {
-
-            String label =
-                    i < featureNames.length
-                            ? featureNames[i]
-                            : ("Feature " + (i + 1));
-
-            contentBuilder
-                    .addText(
-                            "Close-up of the "
-                                    + label.toLowerCase(Locale.ROOT)
-                                    + ":"
-                    )
-                    .addImage(featureImages.get(i));
-        }
+                        + "{\"disease\": \"Healthy\", \"disease_confidences\": {\"Healthy\": 80, "
+                        + "\"Mites\": 5, \"Malocclusion\": 5, \"Pasteurellosis\": 5, \"Myxomatosis\": 5}}";
 
         Content content =
-                contentBuilder.build();
+                new Content.Builder()
+                        .addText(prompt)
+                        .addText("Rabbit photo:")
+                        .addImage(image)
+                        .build();
 
-        ListenableFuture<GenerateContentResponse> response =
-                model.generateContent(content);
+        ListenableFuture<GenerateContentResponse> response = model.generateContent(content);
 
         Futures.addCallback(
                 response,
                 new FutureCallback<GenerateContentResponse>() {
 
                     @Override
-                    public void onSuccess(
-                            GenerateContentResponse result
-                    ) {
-
-                        handleGeminiResult(result.getText());
+                    public void onSuccess(GenerateContentResponse result) {
+                        handleGeminiDiseaseResult(result.getText(), breedLabel, careInfo);
                     }
 
                     @Override
                     public void onFailure(Throwable t) {
 
-                        Log.e(
-                                "Camera",
-                                "Gemini refinement failed",
-                                t
-                        );
+                        Log.e("Camera", "Gemini disease analysis failed", t);
 
-                        if (isAdded()) {
-
-                            requireActivity().runOnUiThread(() ->
-                                    Toast.makeText(
-                                            requireContext(),
-                                            "Gemini analysis failed: "
-                                                    + t.getMessage(),
-                                            Toast.LENGTH_LONG
-                                    ).show()
-                            );
+                        if (!isAdded()) {
+                            return;
                         }
+
+                        requireActivity().runOnUiThread(() -> {
+
+                            dismissLoading();
+
+                            Toast.makeText(
+                                    requireContext(),
+                                    "Gemini health check failed: " + t.getMessage(),
+                                    Toast.LENGTH_LONG
+                            ).show();
+
+                            showResultDialog(
+                                    breedLabel,
+                                    "Unavailable (health check failed, please try again)",
+                                    "",
+                                    careInfo,
+                                    ""
+                            );
+                        });
                     }
                 },
                 geminiExecutor
         );
     }
 
-    private void handleGeminiResult(String rawText) {
+    private void handleGeminiDiseaseResult(
+            String rawText,
+            String breedLabel,
+            String careInfo
+    ) {
 
         if (!isAdded()) {
             return;
@@ -1159,127 +878,67 @@ public class Camera extends Fragment {
 
         requireActivity().runOnUiThread(() -> {
 
+            dismissLoading();
+
+            String diseaseLabel;
+            String confidenceText = "";
+            String diseaseInfo = "";
+
             try {
 
-                String json =
-                        extractJson(rawText);
+                JSONObject obj = new JSONObject(extractJson(rawText));
 
-                JSONObject obj =
-                        new JSONObject(json);
+                String rawDisease = obj.optString("disease", "Healthy").trim();
 
-                String breedLabel =
-                        obj.optString(
-                                "breed",
-                                "Unknown"
-                        );
+                if (rawDisease.isEmpty() || rawDisease.equalsIgnoreCase("Healthy")) {
 
-                if (breedLabel.equalsIgnoreCase("Unknown")
-                        || breedLabel.equalsIgnoreCase("No rabbit")
-                        || breedLabel.equalsIgnoreCase("No rabbit detected")) {
+                    diseaseLabel = NO_ILLNESS_LABEL;
 
-                    showGeminiNoRabbitDialog();
-                    return;
+                } else {
+
+                    diseaseLabel = rawDisease;
+                    confidenceText = buildConfidenceText(obj.optJSONObject("disease_confidences"));
+                    diseaseInfo = getDiseaseInfo(rawDisease);
                 }
-
-                JSONObject breedConfidences =
-                        obj.optJSONObject("breed_confidences");
-
-                String diseaseLabel =
-                        obj.optString(
-                                "disease",
-                                NO_ILLNESS_LABEL
-                        );
-
-                JSONObject diseaseConfidences =
-                        obj.optJSONObject("disease_confidences");
-
-                String care =
-                        obj.optString(
-                                "care",
-                                ""
-                        ).trim();
-
-                SpannableStringBuilder message =
-                        new SpannableStringBuilder();
-
-                message.append("Breed: ")
-                        .append(breedLabel)
-                        .append("\n\n");
-
-                appendConfidences(message, breedConfidences);
-
-                message.append("\nHealth: ")
-                        .append(diseaseLabel)
-                        .append("\n\n");
-
-                if (!diseaseLabel.equalsIgnoreCase("Healthy")) {
-                    appendConfidences(message, diseaseConfidences);
-                }
-
-                if (!care.isEmpty()) {
-
-                    message.append(
-                                    "\nRecommended Care:\n"
-                            )
-                            .append(care)
-                            .append("\n");
-                }
-
-                highlightVetRequired(message);
-
-                AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                        .setTitle("Gemini Breed & Health Estimate")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show();
-
-                styleDialogMessage(dialog);
 
             } catch (JSONException e) {
 
-                Log.e(
-                        "Camera",
-                        "Failed to parse Gemini response: " + rawText,
-                        e
-                );
-
-                AlertDialog fallbackDialog = new AlertDialog.Builder(requireContext())
-                        .setTitle("Gemini Result")
-                        .setMessage(rawText)
-                        .setPositiveButton("OK", null)
-                        .show();
-
-                styleDialogMessage(fallbackDialog);
+                Log.e("Camera", "Failed to parse Gemini response: " + rawText, e);
+                diseaseLabel = "Unavailable (couldn't read the health result)";
             }
+
+            showResultDialog(breedLabel, diseaseLabel, confidenceText, careInfo, diseaseInfo);
         });
     }
 
-    private void appendConfidences(SpannableStringBuilder message, JSONObject confidences) {
+    private String buildConfidenceText(JSONObject confidences) {
 
         if (confidences == null) {
-            return;
+            return "";
         }
 
-        java.util.Iterator<String> keys =
-                confidences.keys();
+        List<Map.Entry<String, Integer>> entries = new ArrayList<>();
+        Iterator<String> keys = confidences.keys();
 
         while (keys.hasNext()) {
 
-            String key =
-                    keys.next();
+            String key = keys.next();
+            int value = confidences.optInt(key, 0);
 
-            message.append(key)
-                    .append(": ")
-                    .append(
-                            String.valueOf(
-                                    confidences.optInt(
-                                            key,
-                                            0
-                                    )
-                            )
-                    )
-                    .append("%\n");
+            if (value > 0) {
+                entries.add(new AbstractMap.SimpleEntry<>(key, value));
+            }
         }
+
+        Collections.sort(entries, (a, b) -> b.getValue() - a.getValue());
+
+        StringBuilder sb = new StringBuilder();
+
+        for (Map.Entry<String, Integer> entry : entries) {
+            sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("%\n");
+        }
+
+        return sb.toString().trim();
     }
 
     private String extractJson(String text) {
@@ -1288,31 +947,87 @@ public class Camera extends Fragment {
             return "{}";
         }
 
-        String trimmed =
-                text.trim();
+        String trimmed = text.trim();
 
         if (trimmed.startsWith("```")) {
 
-            trimmed =
-                    trimmed
-                            .replaceFirst(
-                                    "^```(json)?",
-                                    ""
-                            )
-                            .trim();
+            trimmed = trimmed.replaceFirst("^```(json)?", "").trim();
 
             if (trimmed.endsWith("```")) {
-
-                trimmed =
-                        trimmed.substring(
-                                0,
-                                trimmed.length() - 3
-                        ).trim();
+                trimmed = trimmed.substring(0, trimmed.length() - 3).trim();
             }
         }
 
         return trimmed;
     }
+
+    // ---------------------------------------------------------------------
+    // Combined output
+    // ---------------------------------------------------------------------
+
+    private void showLoading() {
+
+        dismissLoading();
+
+        loadingDialog =
+                new AlertDialog.Builder(requireContext())
+                        .setTitle("Analyzing")
+                        .setMessage("Identifying breed and checking health...")
+                        .setCancelable(false)
+                        .show();
+    }
+
+    private void dismissLoading() {
+
+        if (loadingDialog != null && loadingDialog.isShowing()) {
+            loadingDialog.dismiss();
+        }
+
+        loadingDialog = null;
+    }
+
+    private void showResultDialog(
+            String breedLabel,
+            String diseaseLabel,
+            String confidenceText,
+            String careInfo,
+            String diseaseInfo
+    ) {
+
+        if (!isAdded()) {
+            return;
+        }
+
+        SpannableStringBuilder message = new SpannableStringBuilder();
+
+        message.append("Breed: ").append(breedLabel).append("\n");
+        message.append("Health: ").append(diseaseLabel).append("\n");
+
+        if (!confidenceText.isEmpty()) {
+            message.append("\n").append(confidenceText).append("\n");
+        }
+
+        message.append("\n").append(careInfo);
+
+        if (!diseaseInfo.isEmpty()) {
+            message.append("\n\n").append(diseaseInfo);
+        }
+
+        highlightVetRequired(message);
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(requireContext())
+                        .setTitle("Scan Results")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show();
+
+        styleDialogMessage(dialog);
+    }
+
+    // ---------------------------------------------------------------------
+    // Static info
+    // ---------------------------------------------------------------------
 
     private String getCareInfo(String breed) {
 
@@ -1322,31 +1037,40 @@ public class Camera extends Fragment {
 
                 return "Breed: New Zealand (9-12 lb, lifespan 5-8 yrs)\n\n"
                         + "Diet:\n"
-                        + "- Hay: unlimited, at least 80% of daily diet\n"
-                        + "- Leafy greens: ~1 cup per 2-3 lb of body weight/day (rotate kale, spinach, parsley, romaine, dandelion greens, arugula, bok choy)\n"
-                        + "- Pellets: ~1/4 cup per 4-5 lb of body weight/day\n"
-                        + "- Fruit: only occasionally, 1-2 tbsp per 5 lb, 1-2x/week (too much can cause obesity or GI stasis)\n\n"
+                        + "- Hay/Grass: Unlimited Damong Carabao, Damong Napier, or Bermuda grass (at least 80% of daily diet)\n"
+                        + "- Leafy Greens: ~1 cup per 2-3 lb of body weight/day (rotate Talbos ng Kamote, Pechay, Wansoy, Mustasa, or Dahon ng Saging)\n"
+                        + "- Pellets (Optional): ~1/4 cup per 4-5 lb of body weight/day (if using commercial feeds)\n"
+                        + "- Treats: Only occasionally, 1-2 tbsp of Saging or Papaya per 5 lb, 1-2x/week\n\n"
+                        + "Food Preparation Instructions:\n"
+                        + "1. Hugas (Washing): Wash harvested grasses or market greens thoroughly under clean running water to remove pesticides and soil parasites.\n"
+                        + "2. Pagpapalanta (Wilting): Spread greens on a clean tray in a shaded, well-ventilated area for 2-4 hours. Do not dry directly under the sun. Wilting reduces excess moisture to prevent bloat and fatal diarrhea.\n"
+                        + "3. Pagpuputol (Portioning): Serve in large, fresh, wilted bundles.\n\n"
                         + "Care:\n"
                         + "- Spacious cage/enclosure with daily exercise time\n"
-                        + "- Fresh water available at all times\n\n"
+                        + "- Fresh, cool water available at all times\n"
+                        + "- Provide solid floor mats or wooden rest boards to prevent sore hocks on wire floors due to heavy weight\n\n"
                         + "Notes:\n"
-                        + "- Larger breed — monitor weight to avoid obesity\n\n"
-                        + "Video Guide: \n"
+                        + "- Larger breed — monitor weight to avoid obesity and limit high-protein greens like Talbos ng Kamote to 1 handful per day\n\n"
+                        + "Video Guide:\n"
                         + "https://youtu.be/FbibvbYxIzw?si=GPenxib7t4yb1Ko2";
 
             case "lionhead":
 
                 return "Breed: Lionhead (2.5-3.75 lb, lifespan 7-9 yrs)\n\n"
                         + "Diet:\n"
-                        + "- Hay: unlimited fresh Timothy hay, roughly their own body weight worth per day\n"
-                        + "- Greens: ~1 cup per 2 lb of body weight/day (arugula, parsley, mint, basil, cilantro, spinach, romaine — avoid iceberg lettuce, little nutritional value)\n"
-                        + "- Small amounts of broccoli, bell pepper, squash, kale, zucchini, Brussels sprouts, or carrot tops; carrots themselves sparingly (high in carbs)\n"
-                        + "- Pellets: about 1/8 cup/day for an adult (smaller breed than average)\n\n"
+                        + "- Hay/Grass: Unlimited Damong Carabao or Damong Napier (rough fiber helps pass ingested mane fur)\n"
+                        + "- Greens: ~1 cup per 2 lb of body weight/day (Wansoy, Minta, Pechay, Dahon ng Bayabas — avoid Kangkong in large amounts due to high moisture and calcium content)\n"
+                        + "- Pellets (Optional): About 1/8 cup/day for an adult\n\n"
+                        + "Food Preparation Instructions:\n"
+                        + "1. Hugas (Washing): Thoroughly rinse all harvested Damong Carabao or market greens under running water.\n"
+                        + "2. Pagpapalanta (Wilting): Air-dry/wilt in the shade for 2-4 hours until leaves are soft and not dripping wet.\n"
+                        + "3. Portioning & Health Fiber: Chop grass into manageable lengths. Include 1-2 Dahon ng Bayabas weekly as a natural astringent to keep digestion firm and prevent hairballs.\n\n"
                         + "Care:\n"
-                        + "- Regular grooming required for the long mane fur\n\n"
+                        + "- Regular grooming required for the long mane fur to prevent wool block and severe matting in Philippine humidity\n"
+                        + "- Keep in well-ventilated space to prevent heat stress\n\n"
                         + "Notes:\n"
-                        + "- Watch for hair ingestion/GI blockage from grooming\n\n"
-                        + "Video Guide: \n"
+                        + "- High risk of hair ingestion/GI blockage from grooming\n\n"
+                        + "Video Guide:\n"
                         + "https://youtu.be/57y91glfDGc?si=TGHYF2oIh40aiCxw";
 
             case "holland":
@@ -1354,43 +1078,58 @@ public class Camera extends Fragment {
 
                 return "Breed: Holland Lop (up to 4 lb, lifespan 7-10 yrs)\n\n"
                         + "Diet:\n"
-                        + "- Hay: unlimited amounts, majority of diet\n"
-                        + "- Fresh greens: smaller amount daily\n"
-                        + "- Pellets: ~1/4 cup per 4-5 lb of body weight/day\n\n"
+                        + "- Hay/Grass: Unlimited coarse Damong Carabao or Bermuda grass (majority of diet)\n"
+                        + "- Fresh Greens: Small amounts of Wansoy, Pechay, or Talbos ng Kamote daily\n"
+                        + "- Pellets (Optional): ~1/8 to 1/4 cup per day\n\n"
+                        + "Food Preparation Instructions:\n"
+                        + "1. Hugas (Washing): Clean all local forage and leaves with running water.\n"
+                        + "2. Pagpapalanta (Wilting): Spread out for 2-4 hours indoors or in a shaded spot to let moisture evaporate before feeding.\n"
+                        + "3. Pagpuputol (Portioning): Cut long grass stalks into smaller 4-6 inch pieces for easier chewing and to accommodate their short jaws.\n\n"
                         + "Care:\n"
-                        + "- Check and clean ears regularly (lop ears are prone to wax buildup/infection)\n\n"
+                        + "- Check and clean ears regularly (floppy ears trap moisture in local humidity, making them prone to ear mites or wax buildup)\n"
+                        + "- Provide cooling tiles or frozen water bottles wrapped in cloth on hot Philippine summer days\n\n"
                         + "Notes:\n"
-                        + "- Small breed — avoid overfeeding pellets to prevent obesity\n\n"
-                        + "Video Guide: \n"
+                        + "- Small, flat-faced breed — avoid overfeeding treats like Saging or Papaya (limit to paper-thin slices) to prevent obesity and dental issues\n\n"
+                        + "Video Guide:\n"
                         + "https://youtu.be/HfLwpvfjuuI?si=dXG-fEA-BqKQ5mIJ";
 
             case "california":
 
                 return "Breed: Californian (2.5-4 kg)\n\n"
                         + "Diet:\n"
-                        + "- Hay (timothy, orchard grass, or meadow hay): 80-85% of daily diet\n"
-                        + "- Pellets: ~1/4 cup per 5 lb of body weight/day for adults; free-choice for growing/nursing rabbits. Choose high-fiber, balanced-protein pellets with minimal fillers\n"
-                        + "- Fresh greens for extra vitamins: romaine lettuce, mustard greens, cilantro, basil, dandelion greens\n\n"
+                        + "- Hay/Grass: 80-85% of daily diet consisting of Damong Carabao, Napier, or Bermuda grass\n"
+                        + "- Fresh Greens: Pechay, Mustasa, Wansoy, or small amounts of Kangkong (max 1-2 stalks as hydration treat)\n"
+                        + "- Pellets (Optional): ~1/4 cup per 5 lb of body weight/day for adults\n\n"
+                        + "Food Preparation Instructions:\n"
+                        + "1. Hugas (Washing): Thoroughly wash all foraged grasses and greens to eliminate wild animal waste, dirt, and pesticides.\n"
+                        + "2. Pagpapalanta (Wilting): Leave greens in a shaded, airy area for 2 to 4 hours to wilt. Never serve wet grass directly.\n"
+                        + "3. Serving: Provide wilted grasses freely alongside clean, room-temperature water.\n\n"
                         + "Care:\n"
-                        + "- Keep in a cool environment — dense coat is prone to overheating\n\n"
+                        + "- Keep in a cool, well-ventilated environment — dense coat is prone to overheating in tropical weather\n"
+                        + "- Avoid bare wire-bottom cages; use rubber mats or wood boards\n\n"
                         + "Notes:\n"
-                        + "- Check skin/coat regularly; can be anxious or easily startled, males may show aggression\n\n"
-                        + "Video Guide: \n"
+                        + "- Check skin/coat regularly; can be anxious or easily startled\n\n"
+                        + "Video Guide:\n"
                         + "https://youtu.be/3fJJRRsDwUo?si=hKjR826zbbiKWGFk";
 
             default:
 
                 return "General Rabbit Care\n\n"
                         + "Diet:\n"
-                        + "- Timothy hay freely available at all times (ad libitum)\n"
-                        + "- Pellets: ~1/4 cup per 5 lb of body weight/day, controlled portions to prevent obesity\n"
-                        + "- Fresh, clean water always available — rabbits drink about 120 mL per kg of body weight/day (roughly double a cat or dog of similar size); an open bowl may get more use than a sipper bottle\n"
-                        + "- Keep dietary calcium around 0.4-0.5% for adult non-breeding rabbits; avoid diets based mainly on alfalfa meal, which raises the risk of kidney/urinary calcium problems\n\n"
-                        + "Foods & plants to avoid:\n"
-                        + "- Aloe, azalea, calla lily, lily of the valley, philodendron, corn plant, carnation\n"
-                        + "- Apple seeds, raw beans, sweet potato, rhubarb leaves, potato eyes/shoots/green parts, chocolate\n\n"
+                        + "- Local Grasses (Damong Carabao, Napier, Bermuda grass) freely available at all times\n"
+                        + "- Leafy Greens (Pechay, Talbos ng Kamote, Wansoy): Small daily portions\n"
+                        + "- Pellets (Optional): ~1/4 cup per 5 lb of body weight/day, controlled portions to prevent obesity\n"
+                        + "- Fresh, clean water always available — an open ceramic bowl is often preferred over a sipper bottle\n\n"
+                        + "Food Preparation Instructions:\n"
+                        + "1. Hugas (Washing): Always rinse freshly harvested grasses and market produce thoroughly.\n"
+                        + "2. Pagpapalanta (Wilting): Wilt all fresh forage for 2-4 hours in a shaded, airy area before feeding to prevent severe bloat or diarrhea.\n\n"
+                        + "Foods & Plants to Avoid:\n"
+                        + "1. Iceberg Lettuce (contains laudanum, causes severe diarrhea)\n"
+                        + "2. Excessive Kangkong (high oxalic acid and water content)\n"
+                        + "3. Toxic Plants: Aloe, azalea, calla lily, lily of the valley, philodendron, corn plant, carnation\n"
+                        + "4. Toxic Foods: Apple seeds, raw beans, sweet potato tubers, rhubarb leaves, potato shoots, chocolate, garlic, onions\n\n"
                         + "Notes:\n"
-                        + "- Loss of appetite can be a sign of dehydration or illness — seek veterinary care if a rabbit stops eating";
+                        + "- Loss of appetite can be a sign of heatstroke, GI stasis, or illness — seek immediate veterinary care if a rabbit stops eating";
         }
     }
 
@@ -1400,29 +1139,30 @@ public class Camera extends Fragment {
 
             case "myxomatosis":
 
-                return " Myxomatosis\n️ Severe viral disease\n Vet required\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
+                return " Myxomatosis\n️Vet required\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/RUezkUetEEA?si=gcsRr-tNhlvpU7sg";
 
             case "mites":
 
-                return " Mites\n️ Skin irritation\n Treat with ivermectin\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
+                return " Mites\n️ If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/iQyPn2VL70s?si=EAnvWMapiA8YgJRW";
 
             case "malocclusion":
 
-                return " Malocclusion\n️ Teeth problem\n Needs dental care\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
+                return " Malocclusion\n️ If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/2F328Q38uJc?si=PQNXStwEciaECc8h";
 
             case "pasteurellosis":
 
-                return " Pasteurellosis\n⚠ Respiratory infection\n Antibiotics required\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
+                return " Pasteurellosis\n If unsure of this result please Schedule a visit with your Veterinarian.\n\n"
                         + "Additional Info: \n"
                         + "https://youtu.be/Uxj0VIqC83Q?si=J5OugchFPDFVkepC";
         }
 
-        return "";
+        // Any other condition Gemini reports that we don't have a dedicated write-up for
+        return " " + disease + "\n If unsure of this result please Schedule a visit with your Veterinarian.";
     }
 }

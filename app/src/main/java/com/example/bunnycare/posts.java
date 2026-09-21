@@ -16,6 +16,8 @@ public class posts {
 
     private Timestamp timestamp;
 
+    private boolean verified;
+
     public posts() {
     }
 
@@ -27,7 +29,8 @@ public class posts {
                  String profileImage,
                  int likesCount,
                  int commentCount,
-                 Timestamp timestamp) {
+                 Timestamp timestamp,
+                 boolean verified) {
 
         this.id = id;
         this.post = post;
@@ -38,6 +41,7 @@ public class posts {
         this.likesCount = likesCount;
         this.commentCount = commentCount;
         this.timestamp = timestamp;
+        this.verified = verified;
     }
 
     public String getId() {
@@ -76,6 +80,10 @@ public class posts {
         return timestamp;
     }
 
+    public boolean isVerified() {
+        return verified;
+    }
+
     public void setId(String id) {
         this.id = id;
     }
@@ -110,5 +118,9 @@ public class posts {
 
     public void setTimestamp(Timestamp timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public void setVerified(boolean verified) {
+        this.verified = verified;
     }
 }

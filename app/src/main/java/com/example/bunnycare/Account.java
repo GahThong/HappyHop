@@ -2,6 +2,7 @@ package com.example.bunnycare;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -16,6 +17,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -45,7 +47,7 @@ import java.util.Map;
  * and the Account card (Notifications / Account Settings / Log Out).
  *
  * Assumed Firestore shape (adjust field names to match your project if different):
- *   users/{uid}              -> username, email, imageUrl
+ *   users/{uid}              -> username, email, imageUrl, verified
  *   rabbits                   -> ownerId, name, breed, imageUrl
  *   notifications              -> recipientId, message, read, timestamp
  *   verificationRequests      -> userId, licenseImageUrl, status, submittedAt
@@ -72,6 +74,8 @@ public class Account extends Fragment {
     // Separate picker just for the vet license photo used in "Verify Account"
     Uri verificationImageUri;
     ActivityResultLauncher<Intent> verificationImagePickerLauncher;
+
+    boolean isVerifiedVet = false;
 
     @Nullable
     @Override
@@ -191,8 +195,13 @@ public class Account extends Fragment {
                 .unsigned("ml_default")
                 .callback(new UploadCallback() {
 
-                    @Override public void onStart(String requestId) {}
-                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
+                    @Override
+                    public void onStart(String requestId) {
+                    }
+
+                    @Override
+                    public void onProgress(String requestId, long bytes, long totalBytes) {
+                    }
 
                     @Override
                     public void onSuccess(String requestId, Map resultData) {
@@ -221,7 +230,9 @@ public class Account extends Fragment {
                         Toast.makeText(getContext(), "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
                     }
 
-                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
+                    @Override
+                    public void onReschedule(String requestId, ErrorInfo error) {
+                    }
 
                 }).dispatch();
     }
@@ -246,8 +257,13 @@ public class Account extends Fragment {
                 .unsigned("ml_default")
                 .callback(new UploadCallback() {
 
-                    @Override public void onStart(String requestId) {}
-                    @Override public void onProgress(String requestId, long bytes, long totalBytes) {}
+                    @Override
+                    public void onStart(String requestId) {
+                    }
+
+                    @Override
+                    public void onProgress(String requestId, long bytes, long totalBytes) {
+                    }
 
                     @Override
                     public void onSuccess(String requestId, Map resultData) {
@@ -289,7 +305,9 @@ public class Account extends Fragment {
                         Toast.makeText(getContext(), "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
                     }
 
-                    @Override public void onReschedule(String requestId, ErrorInfo error) {}
+                    @Override
+                    public void onReschedule(String requestId, ErrorInfo error) {
+                    }
 
                 }).dispatch();
     }
@@ -301,10 +319,17 @@ public class Account extends Fragment {
                 .get()
                 .addOnSuccessListener(doc -> {
 
+                    if (!isAdded() || getContext() == null) return;
+
                     if (!doc.exists()) return;
 
                     profileName.setText(doc.getString("username"));
                     profileEmail.setText(doc.getString("email"));
+
+                    Boolean verified = doc.getBoolean("verified");
+                    isVerifiedVet = verified != null && verified;
+
+                    applyVerifiedBadge();
 
                     String imageUrl = doc.getString("imageUrl");
 
@@ -315,6 +340,36 @@ public class Account extends Fragment {
                                 .into(profileImage);
                     }
                 });
+    }
+
+    /**
+     * Shows/hides the small "verified" checkmark PNG next to the username,
+     * based on the users/{uid}.verified flag. Wrapped so a missing/renamed
+     * drawable resource can never crash this screen or block anything else
+     * in loadUser() (like the profile photo) from running.
+     */
+    private void applyVerifiedBadge() {
+
+        int badgePaddingPx = (int) (6 * getResources().getDisplayMetrics().density);
+        int badgeSizePx = (int) (14 * getResources().getDisplayMetrics().density);
+
+        profileName.setCompoundDrawablePadding(badgePaddingPx);
+
+        if (isVerifiedVet) {
+            Drawable verifiedBadge = null;
+            try {
+                verifiedBadge = ContextCompat.getDrawable(requireContext(), R.drawable.verified);
+            } catch (Exception ignored) {
+                // If res/drawable/verified.png is missing this just skips the badge
+                // instead of throwing a Resources.NotFoundException.
+            }
+            if (verifiedBadge != null) {
+                verifiedBadge.setBounds(0, 0, badgeSizePx, badgeSizePx);
+            }
+            profileName.setCompoundDrawables(null, null, verifiedBadge, null);
+        } else {
+            profileName.setCompoundDrawables(null, null, null, null);
+        }
     }
 
     private void loadRabbits() {
@@ -423,22 +478,29 @@ public class Account extends Fragment {
      */
     private void openAccountSettings() {
 
-        String[] options = {"Change Email", "Change Password", "Verify Account"};
+        List<String> optionList = new ArrayList<>();
+        optionList.add("Change Email");
+        optionList.add("Change Password");
+
+        // Already-verified vets don't need (and shouldn't see) this option.
+        if (!isVerifiedVet) {
+            optionList.add("Verify Account");
+        }
+
+        String[] options = optionList.toArray(new String[0]);
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Account Settings")
                 .setItems(options, (dialog, which) -> {
 
-                    switch (which) {
-                        case 0:
-                            promptReauth(this::promptChangeEmail);
-                            break;
-                        case 1:
-                            promptReauth(this::promptChangePassword);
-                            break;
-                        case 2:
-                            promptVerifyAccount();
-                            break;
+                    String selected = options[which];
+
+                    if (selected.equals("Change Email")) {
+                        promptReauth(this::promptChangeEmail);
+                    } else if (selected.equals("Change Password")) {
+                        promptReauth(this::promptChangePassword);
+                    } else if (selected.equals("Verify Account")) {
+                        promptVerifyAccount();
                     }
                 })
                 .setNegativeButton("Cancel", null)
