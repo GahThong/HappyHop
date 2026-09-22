@@ -19,6 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.method.LinkMovementMethod;
@@ -32,6 +33,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -48,6 +50,8 @@ import androidx.fragment.app.Fragment;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -58,8 +62,10 @@ import com.google.firebase.ai.type.Content;
 import com.google.firebase.ai.type.GenerateContentResponse;
 import com.google.firebase.ai.type.GenerativeBackend;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -70,12 +76,13 @@ import org.tensorflow.lite.task.vision.classifier.Classifications;
 import org.tensorflow.lite.task.vision.classifier.ImageClassifier;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.AbstractMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -83,11 +90,15 @@ public class Camera extends Fragment {
 
     int imageSize = 224;
 
-    // Breed (local ML) thresholds
     static final float RABBIT_PRESENCE_THRESHOLD = 0.99f;
     static final float BREED_MIN_MARGIN = 0.1f;
 
     static final String NO_ILLNESS_LABEL = "No signs of illness detected";
+
+    static final String COLLECTION_USERS = "users";
+    static final String COLLECTION_VET_REVIEWS = "vetRecommendations";
+
+    static final String STATUS_PENDING = "pending_approval";
 
     String[] breedLabels = {
             "Holland",
@@ -96,7 +107,6 @@ public class Camera extends Fragment {
             "Lionhead"
     };
 
-    // Used only for the Gemini prompt and disease info text
     String[] diseaseLabels = {
             "Myxomatosis",
             "Mites",
@@ -121,6 +131,10 @@ public class Camera extends Fragment {
     private FirebaseFirestore db;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
+
+    private interface RoleCallback {
+        void onResult(boolean isVet);
+    }
 
     @Override
     public View onCreateView(
@@ -386,10 +400,6 @@ public class Camera extends Fragment {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Connectivity
-    // ---------------------------------------------------------------------
-
     private void setupConnectivityMonitoring() {
 
         connectivityManager =
@@ -508,10 +518,6 @@ public class Camera extends Fragment {
         txtStatus = null;
         yourRabbitsRow = null;
     }
-
-    // ---------------------------------------------------------------------
-    // Camera / picking
-    // ---------------------------------------------------------------------
 
     private void openCamera() {
 
@@ -646,10 +652,6 @@ public class Camera extends Fragment {
         popupWindow.showAtLocation(getView(), Gravity.CENTER, 0, 0);
     }
 
-    // ---------------------------------------------------------------------
-    // Step 1: BREED via local ML model
-    // ---------------------------------------------------------------------
-
     private void runLocalClassification(Bitmap image) {
 
         Bitmap processedImage = image.copy(Bitmap.Config.ARGB_8888, true);
@@ -733,7 +735,6 @@ public class Camera extends Fragment {
 
             String careInfo = getCareInfo(breedLabel);
 
-            // Step 2: DISEASE via Gemini (needs internet)
             if (isCurrentlyOnline()) {
 
                 showLoading();
@@ -741,7 +742,7 @@ public class Camera extends Fragment {
 
             } else {
 
-                showResultDialog(
+                fetchApprovedAdditionsThenShow(
                         breedLabel,
                         "Unavailable (offline, connect to the internet for a health check)",
                         "",
@@ -778,10 +779,6 @@ public class Camera extends Fragment {
 
         styleDialogMessage(dialog);
     }
-
-    // ---------------------------------------------------------------------
-    // Step 2: DISEASE via Gemini
-    // ---------------------------------------------------------------------
 
     private void runGeminiDiseaseAnalysis(
             Bitmap image,
@@ -852,7 +849,7 @@ public class Camera extends Fragment {
                                     Toast.LENGTH_LONG
                             ).show();
 
-                            showResultDialog(
+                            fetchApprovedAdditionsThenShow(
                                     breedLabel,
                                     "Unavailable (health check failed, please try again)",
                                     "",
@@ -907,7 +904,7 @@ public class Camera extends Fragment {
                 diseaseLabel = "Unavailable (couldn't read the health result)";
             }
 
-            showResultDialog(breedLabel, diseaseLabel, confidenceText, careInfo, diseaseInfo);
+            fetchApprovedAdditionsThenShow(breedLabel, diseaseLabel, confidenceText, careInfo, diseaseInfo);
         });
     }
 
@@ -961,9 +958,310 @@ public class Camera extends Fragment {
         return trimmed;
     }
 
-    // ---------------------------------------------------------------------
-    // Combined output
-    // ---------------------------------------------------------------------
+    private void checkIfCurrentUserIsVet(RoleCallback callback) {
+
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+            callback.onResult(false);
+            return;
+        }
+
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+        db.collection(COLLECTION_USERS)
+                .document(uid)
+                .get()
+                .addOnSuccessListener(doc -> {
+
+                    if (doc == null || !doc.exists()) {
+                        callback.onResult(false);
+                        return;
+                    }
+
+                    Boolean verifiedVet = doc.getBoolean("verifiedVet");
+
+                    callback.onResult(
+                            verifiedVet != null && verifiedVet
+                    );
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("Camera", "Failed to check vet verification status", e);
+                    callback.onResult(false);
+                });
+    }
+
+    private void onAddRecommendationClicked(
+            String breedLabel,
+            String diseaseLabel
+    ) {
+
+        checkIfCurrentUserIsVet(isVet -> {
+
+            if (!isAdded()) {
+                return;
+            }
+
+            if (isVet) {
+                showAddRecommendationDialog(breedLabel, diseaseLabel);
+            } else {
+                Toast.makeText(
+                        requireContext(),
+                        "Only verified vets can add a recommendation.",
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+        });
+    }
+
+    private void showAddRecommendationDialog(
+            String breedLabel,
+            String diseaseLabel
+    ) {
+
+        Context context = requireContext();
+
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dpToPx(20), dpToPx(16), dpToPx(20), dpToPx(4));
+
+        EditText dietInput = addLabeledInput(context, container, "Diet", "e.g. Increase leafy greens, add more hay volume", 0);
+        EditText careInput = addLabeledInput(context, container, "Care", "e.g. Increase enclosure ventilation, daily grooming", 14);
+        EditText treatmentInput = addLabeledInput(context, container, "Treatment", "e.g. Ivermectin dosage, frequency, duration", 14);
+
+        AlertDialog dialog = new AlertDialog.Builder(context)
+                .setTitle("Add Recommendation")
+                .setMessage("This will be submitted for admin approval before it's added.")
+                .setView(container)
+                .setPositiveButton("Submit for Approval", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+
+            Button submitButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+
+            submitButton.setOnClickListener(v -> {
+
+                String diet = dietInput.getText().toString().trim();
+                String care = careInput.getText().toString().trim();
+                String treatment = treatmentInput.getText().toString().trim();
+
+                if (diet.isEmpty() && care.isEmpty() && treatment.isEmpty()) {
+                    Toast.makeText(
+                            context,
+                            "Please fill in at least one field first.",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    return;
+                }
+
+                submitVetRecommendation(breedLabel, diseaseLabel, diet, care, treatment);
+
+                dialog.dismiss();
+            });
+        });
+
+        dialog.show();
+    }
+
+    private EditText addLabeledInput(
+            Context context,
+            LinearLayout container,
+            String labelText,
+            String hint,
+            int topMarginDp
+    ) {
+
+        TextView label = new TextView(context);
+        label.setText(labelText);
+        label.setTextColor(0xFF3A3226);
+        label.setTypeface(label.getTypeface(), android.graphics.Typeface.BOLD);
+
+        if (topMarginDp > 0) {
+            LinearLayout.LayoutParams labelParams =
+                    new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                    );
+            labelParams.topMargin = dpToPx(topMarginDp);
+            label.setLayoutParams(labelParams);
+        }
+
+        EditText input = new EditText(context);
+        input.setHint(hint);
+        input.setInputType(
+                InputType.TYPE_CLASS_TEXT
+                        | InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                        | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        );
+        input.setMinLines(2);
+
+        container.addView(label);
+        container.addView(input);
+
+        return input;
+    }
+
+    private void submitVetRecommendation(
+            String breedLabel,
+            String diseaseLabel,
+            String diet,
+            String care,
+            String treatment
+    ) {
+
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+            Toast.makeText(
+                    requireContext(),
+                    "You must be signed in to submit a recommendation.",
+                    Toast.LENGTH_SHORT
+            ).show();
+            return;
+        }
+
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+        String diseaseKey =
+                (diseaseLabel != null && !diseaseLabel.equals(NO_ILLNESS_LABEL))
+                        ? diseaseLabel
+                        : null;
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("breed", breedLabel);
+        data.put("diseaseResult", diseaseKey);
+
+        if (!diet.isEmpty()) {
+            data.put("dietRecommendation", diet);
+        }
+        if (!care.isEmpty()) {
+            data.put("careRecommendation", care);
+        }
+        if (!treatment.isEmpty()) {
+            data.put("treatmentRecommendation", treatment);
+        }
+
+        data.put("vetUid", uid);
+        data.put("status", STATUS_PENDING);
+        data.put("approved", false);
+        data.put("approvedBy", null);
+        data.put("createdAt", FieldValue.serverTimestamp());
+
+        db.collection(COLLECTION_VET_REVIEWS)
+                .add(data)
+                .addOnSuccessListener(ref -> {
+                    if (isAdded()) {
+                        Toast.makeText(
+                                requireContext(),
+                                "Submitted — pending admin approval.",
+                                Toast.LENGTH_LONG
+                        ).show();
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("Camera", "Failed to submit vet recommendation", e);
+                    if (isAdded()) {
+                        Toast.makeText(
+                                requireContext(),
+                                "Failed to submit: " + e.getMessage(),
+                                Toast.LENGTH_LONG
+                        ).show();
+                    }
+                });
+    }
+
+    private void fetchApprovedAdditionsThenShow(
+            String breedLabel,
+            String diseaseLabel,
+            String confidenceText,
+            String careInfo,
+            String diseaseInfo
+    ) {
+
+        String diseaseKey =
+                (diseaseLabel != null && !diseaseLabel.equals(NO_ILLNESS_LABEL))
+                        ? diseaseLabel
+                        : null;
+
+        Task<QuerySnapshot> breedTask =
+                db.collection(COLLECTION_VET_REVIEWS)
+                        .whereEqualTo("approved", true)
+                        .whereEqualTo("breed", breedLabel)
+                        .get();
+
+        List<Task<?>> tasks = new ArrayList<>();
+        tasks.add(breedTask);
+
+        Task<QuerySnapshot> diseaseTask = null;
+
+        if (diseaseKey != null) {
+            diseaseTask = db.collection(COLLECTION_VET_REVIEWS)
+                    .whereEqualTo("approved", true)
+                    .whereEqualTo("diseaseResult", diseaseKey)
+                    .get();
+            tasks.add(diseaseTask);
+        }
+
+        final Task<QuerySnapshot> finalDiseaseTask = diseaseTask;
+
+        Tasks.whenAllComplete(tasks)
+                .addOnSuccessListener(results -> {
+
+                    if (!isAdded()) {
+                        return;
+                    }
+
+                    StringBuilder dietAdd = new StringBuilder();
+                    StringBuilder careAdd = new StringBuilder();
+                    StringBuilder treatmentAdd = new StringBuilder();
+
+                    if (breedTask.isSuccessful() && breedTask.getResult() != null) {
+                        for (QueryDocumentSnapshot doc : breedTask.getResult()) {
+                            appendIfPresent(dietAdd, doc.getString("dietRecommendation"));
+                            appendIfPresent(careAdd, doc.getString("careRecommendation"));
+                        }
+                    }
+
+                    if (finalDiseaseTask != null
+                            && finalDiseaseTask.isSuccessful()
+                            && finalDiseaseTask.getResult() != null) {
+                        for (QueryDocumentSnapshot doc : finalDiseaseTask.getResult()) {
+                            appendIfPresent(treatmentAdd, doc.getString("treatmentRecommendation"));
+                        }
+                    }
+
+                    String mergedCareInfo = careInfo;
+
+                    if (dietAdd.length() > 0) {
+                        mergedCareInfo += "\n\nVet-Approved Diet Notes:\n" + dietAdd;
+                    }
+                    if (careAdd.length() > 0) {
+                        mergedCareInfo += "\n\nVet-Approved Care Notes:\n" + careAdd;
+                    }
+
+                    String mergedDiseaseInfo = diseaseInfo;
+
+                    if (treatmentAdd.length() > 0) {
+                        mergedDiseaseInfo += "\n\nVet-Approved Treatment Notes:\n" + treatmentAdd;
+                    }
+
+                    showResultDialog(breedLabel, diseaseLabel, confidenceText, mergedCareInfo, mergedDiseaseInfo);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("Camera", "Failed to fetch approved vet additions", e);
+                    if (isAdded()) {
+                        showResultDialog(breedLabel, diseaseLabel, confidenceText, careInfo, diseaseInfo);
+                    }
+                });
+    }
+
+    private void appendIfPresent(StringBuilder sb, String text) {
+
+        if (text != null && !text.trim().isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+            sb.append("• ").append(text.trim());
+        }
+    }
 
     private void showLoading() {
 
@@ -1015,19 +1313,31 @@ public class Camera extends Fragment {
 
         highlightVetRequired(message);
 
-        AlertDialog dialog =
-                new AlertDialog.Builder(requireContext())
-                        .setTitle("Scan Results")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show();
+        checkIfCurrentUserIsVet(isVet -> {
 
-        styleDialogMessage(dialog);
+            if (!isAdded()) {
+                return;
+            }
+
+            AlertDialog.Builder builder =
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Scan Results")
+                            .setMessage(message)
+                            .setPositiveButton("OK", null);
+
+            if (isVet) {
+                builder.setNeutralButton(
+                        "Vet: Add Recommendation",
+                        (d, which) ->
+                                showAddRecommendationDialog(breedLabel, diseaseLabel)
+                );
+            }
+
+            AlertDialog dialog = builder.create();
+            dialog.show();
+            styleDialogMessage(dialog);
+        });
     }
-
-    // ---------------------------------------------------------------------
-    // Static info
-    // ---------------------------------------------------------------------
 
     private String getCareInfo(String breed) {
 
@@ -1162,7 +1472,6 @@ public class Camera extends Fragment {
                         + "https://youtu.be/Uxj0VIqC83Q?si=J5OugchFPDFVkepC";
         }
 
-        // Any other condition Gemini reports that we don't have a dedicated write-up for
         return " " + disease + "\n If unsure of this result please Schedule a visit with your Veterinarian.";
     }
 }

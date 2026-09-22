@@ -2,7 +2,9 @@ package com.example.bunnycare;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -11,6 +13,8 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -42,21 +46,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Profile screen: avatar, name, email, "Edit Profile", the "My Rabbits" list,
- * and the Account card (Notifications / Account Settings / Log Out).
- *
- * Assumed Firestore shape (adjust field names to match your project if different):
- *   users/{uid}              -> username, email, imageUrl, verified
- *   rabbits                   -> ownerId, name, breed, imageUrl
- *   notifications              -> recipientId, message, read, timestamp
- *   verificationRequests      -> userId, licenseImageUrl, status, submittedAt
- */
 public class Account extends Fragment {
 
     ImageView profileImage;
     TextView profileName, profileEmail, notificationBadge;
     View btnEditProfile, rowNotifications, rowPrivacy, rowLogout;
+    Button btnVetPictureContribution;
+    ActivityResultLauncher<Intent> vetContributionImagePickerLauncher;
+    Uri vetContributionImageUri;
+    AlertDialog vetContributionDialog;
+    ImageView vetContributionPreview;
+    TextView vetContributionBreedButton;
+    TextView vetContributionDiseaseButton;
     RecyclerView rabbitsRecyclerView;
 
     FirebaseAuth mAuth;
@@ -71,9 +72,10 @@ public class Account extends Fragment {
     Uri imageUri;
     ActivityResultLauncher<Intent> imagePickerLauncher;
 
-    // Separate picker just for the vet license photo used in "Verify Account"
     Uri verificationImageUri;
     ActivityResultLauncher<Intent> verificationImagePickerLauncher;
+
+    String verificationType;
 
     boolean isVerifiedVet = false;
 
@@ -88,10 +90,11 @@ public class Account extends Fragment {
         profileName = view.findViewById(R.id.profileName);
         profileEmail = view.findViewById(R.id.profileEmail);
         btnEditProfile = view.findViewById(R.id.btnEditProfile);
+        btnVetPictureContribution = view.findViewById(R.id.btnVetPictureContribution);
         rabbitsRecyclerView = view.findViewById(R.id.rabbitsRecyclerView);
         rowNotifications = view.findViewById(R.id.rowNotifications);
         notificationBadge = view.findViewById(R.id.notificationBadge);
-        rowPrivacy = view.findViewById(R.id.rowPrivacy); // TODO: rename id/label to "Account Settings" in XML
+        rowPrivacy = view.findViewById(R.id.rowPrivacy);
         rowLogout = view.findViewById(R.id.rowLogout);
 
         mAuth = FirebaseAuth.getInstance();
@@ -126,9 +129,32 @@ public class Account extends Fragment {
                     }
                 });
 
+        vetContributionImagePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+
+                        vetContributionImageUri = result.getData().getData();
+
+                        if (vetContributionPreview != null) {
+                            Glide.with(requireContext())
+                                    .load(vetContributionImageUri)
+                                    .into(vetContributionPreview);
+
+                            vetContributionPreview.setVisibility(View.VISIBLE);
+                        }
+
+                        updateVetContributionSubmitButton();
+                    }
+                });
+
+        btnVetPictureContribution.setVisibility(View.GONE);
+        btnVetPictureContribution.setOnClickListener(v -> showVetPictureContributionDialog());
+
         profileImage.setOnClickListener(v -> openGallery());
 
         rabbitList = new ArrayList<>();
+
         rabbitsAdapter = new RabbitAdapter(getContext(), rabbitList, new RabbitAdapter.OnRabbitItemListener() {
 
             @Override
@@ -144,7 +170,7 @@ public class Account extends Fragment {
 
             @Override
             public void onRabbitLongPress(Rabbit rabbit) {
-                // No long-press action on the profile screen for now
+
             }
         });
 
@@ -237,19 +263,16 @@ public class Account extends Fragment {
                 }).dispatch();
     }
 
-    /**
-     * Uploads the vet license photo and creates a pending verification
-     * request for the admin to review. Does NOT flip any "verified" flag
-     * client-side — that should only ever happen from the admin side
-     * (e.g. an Admin Cloud Function or admin app writing back to the user doc)
-     * so a user can't just mark themselves verified.
-     */
     private void uploadVerificationPhoto() {
 
-        if (verificationImageUri == null) return;
+        if (verificationImageUri == null || user == null || verificationType == null) return;
 
         if (isAdded()) {
-            Toast.makeText(getContext(), "Uploading license photo...", Toast.LENGTH_SHORT).show();
+            String message = verificationType.equals("veterinarian")
+                    ? "Uploading veterinarian verification photo..."
+                    : "Uploading feed supplier verification photo...";
+
+            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
         }
 
         MediaManager.get()
@@ -271,11 +294,20 @@ public class Account extends Fragment {
                         String secureUrl = (String) resultData.get("secure_url");
 
                         Map<String, Object> request = new HashMap<>();
+
                         request.put("userId", user.getUid());
                         request.put("userEmail", user.getEmail());
+                        request.put("verificationType", verificationType);
                         request.put("licenseImageUrl", secureUrl);
+                        request.put("imageUrl", secureUrl);
                         request.put("status", "pending");
                         request.put("submittedAt", FieldValue.serverTimestamp());
+
+                        if ("veterinarian".equals(verificationType)) {
+                            request.put("documentType", "Veterinary License");
+                        } else if ("feed_supplier".equals(verificationType)) {
+                            request.put("documentType", "Feed Supplier Verification");
+                        }
 
                         db.collection("verificationRequests")
                                 .add(request)
@@ -283,17 +315,32 @@ public class Account extends Fragment {
 
                                     if (!isAdded() || getContext() == null) return;
 
-                                    Toast.makeText(getContext(),
-                                            "Submitted for review. We'll notify you once an admin verifies your license.",
-                                            Toast.LENGTH_LONG).show();
+                                    String message;
+
+                                    if ("veterinarian".equals(verificationType)) {
+                                        message = "Veterinarian verification submitted. We'll notify you once an admin reviews it.";
+                                    } else {
+                                        message = "Feed supplier verification submitted. We'll notify you once an admin reviews it.";
+                                    }
+
+                                    verificationImageUri = null;
+                                    verificationType = null;
+
+                                    Toast.makeText(
+                                            getContext(),
+                                            message,
+                                            Toast.LENGTH_LONG
+                                    ).show();
                                 })
                                 .addOnFailureListener(e -> {
 
                                     if (!isAdded() || getContext() == null) return;
 
-                                    Toast.makeText(getContext(),
+                                    Toast.makeText(
+                                            getContext(),
                                             "Couldn't submit for review: " + e.getMessage(),
-                                            Toast.LENGTH_LONG).show();
+                                            Toast.LENGTH_LONG
+                                    ).show();
                                 });
                     }
 
@@ -302,7 +349,11 @@ public class Account extends Fragment {
 
                         if (!isAdded() || getContext() == null) return;
 
-                        Toast.makeText(getContext(), "Upload failed: " + error.getDescription(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(
+                                getContext(),
+                                "Upload failed: " + error.getDescription(),
+                                Toast.LENGTH_LONG
+                        ).show();
                     }
 
                     @Override
@@ -329,6 +380,8 @@ public class Account extends Fragment {
                     Boolean verified = doc.getBoolean("verified");
                     isVerifiedVet = verified != null && verified;
 
+                    updateVetContributionButton();
+
                     applyVerifiedBadge();
 
                     String imageUrl = doc.getString("imageUrl");
@@ -342,12 +395,6 @@ public class Account extends Fragment {
                 });
     }
 
-    /**
-     * Shows/hides the small "verified" checkmark PNG next to the username,
-     * based on the users/{uid}.verified flag. Wrapped so a missing/renamed
-     * drawable resource can never crash this screen or block anything else
-     * in loadUser() (like the profile photo) from running.
-     */
     private void applyVerifiedBadge() {
 
         int badgePaddingPx = (int) (6 * getResources().getDisplayMetrics().density);
@@ -356,20 +403,409 @@ public class Account extends Fragment {
         profileName.setCompoundDrawablePadding(badgePaddingPx);
 
         if (isVerifiedVet) {
+
             Drawable verifiedBadge = null;
+
             try {
                 verifiedBadge = ContextCompat.getDrawable(requireContext(), R.drawable.verified);
             } catch (Exception ignored) {
-                // If res/drawable/verified.png is missing this just skips the badge
-                // instead of throwing a Resources.NotFoundException.
             }
+
             if (verifiedBadge != null) {
                 verifiedBadge.setBounds(0, 0, badgeSizePx, badgeSizePx);
             }
+
             profileName.setCompoundDrawables(null, null, verifiedBadge, null);
+
         } else {
             profileName.setCompoundDrawables(null, null, null, null);
         }
+    }
+
+    private void updateVetContributionButton() {
+
+        if (btnVetPictureContribution == null) return;
+
+        btnVetPictureContribution.setVisibility(isVerifiedVet ? View.VISIBLE : View.GONE);
+    }
+
+    private void showVetPictureContributionDialog() {
+
+        if (!isVerifiedVet) {
+            Toast.makeText(
+                    getContext(),
+                    "Only verified vets can submit pictures.",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+        vetContributionImageUri = null;
+
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(32, 8, 32, 8);
+
+        TextView breedButton = new TextView(requireContext());
+        vetContributionBreedButton = breedButton;
+
+        breedButton.setText("Select Breed");
+        breedButton.setTextColor(Color.BLACK);
+        breedButton.setTextSize(15);
+        breedButton.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        breedButton.setPadding(24, 18, 24, 18);
+
+        GradientDrawable breedBg = new GradientDrawable();
+        breedBg.setColor(Color.WHITE);
+        breedBg.setCornerRadius(18);
+        breedBg.setStroke(2, Color.LTGRAY);
+
+        breedButton.setBackground(breedBg);
+
+        TextView diseaseButton = new TextView(requireContext());
+        vetContributionDiseaseButton = diseaseButton;
+
+        diseaseButton.setText("Select Disease");
+        diseaseButton.setTextColor(Color.BLACK);
+        diseaseButton.setTextSize(15);
+        diseaseButton.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        diseaseButton.setPadding(24, 18, 24, 18);
+
+        GradientDrawable diseaseBg = new GradientDrawable();
+        diseaseBg.setColor(Color.WHITE);
+        diseaseBg.setCornerRadius(18);
+        diseaseBg.setStroke(2, Color.LTGRAY);
+
+        diseaseButton.setBackground(diseaseBg);
+
+        ImageView preview = new ImageView(requireContext());
+        vetContributionPreview = preview;
+
+        preview.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                220
+        ));
+
+        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        preview.setVisibility(View.GONE);
+
+        Button choosePicture = new Button(requireContext());
+        choosePicture.setText("Choose Picture");
+        choosePicture.setAllCaps(false);
+
+        layout.addView(breedButton);
+        layout.addView(diseaseButton);
+
+        LinearLayout.LayoutParams previewParams =
+                (LinearLayout.LayoutParams) preview.getLayoutParams();
+
+        previewParams.topMargin = 18;
+        previewParams.bottomMargin = 8;
+
+        layout.addView(preview, previewParams);
+        layout.addView(choosePicture);
+
+        final String[] selectedBreed = {null};
+        final String[] selectedDisease = {null};
+
+        breedButton.setOnClickListener(v -> {
+
+            String[] breeds = {
+                    "Holland",
+                    "California",
+                    "New Zealand",
+                    "Lionhead"
+            };
+
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Select Breed")
+                    .setItems(breeds, (dialog, which) -> {
+
+                        selectedBreed[0] = breeds[which];
+
+                        breedButton.setText(selectedBreed[0]);
+
+                        updateVetContributionSubmitButton(
+                                selectedBreed[0],
+                                selectedDisease[0]
+                        );
+                    })
+                    .show();
+        });
+
+        diseaseButton.setOnClickListener(v -> {
+
+            String[] diseases = {
+                    "Myxomatosis",
+                    "Mites",
+                    "Malocclusion",
+                    "Pasteurellosis"
+            };
+
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Select Disease")
+                    .setItems(diseases, (dialog, which) -> {
+
+                        selectedDisease[0] = diseases[which];
+
+                        diseaseButton.setText(selectedDisease[0]);
+
+                        updateVetContributionSubmitButton(
+                                selectedBreed[0],
+                                selectedDisease[0]
+                        );
+                    })
+                    .show();
+        });
+
+        choosePicture.setOnClickListener(v -> {
+
+            Intent intent = new Intent(Intent.ACTION_PICK);
+            intent.setType("image/*");
+
+            vetContributionImagePickerLauncher.launch(intent);
+        });
+
+        vetContributionDialog = new AlertDialog.Builder(requireContext())
+                .setTitle("Wanna Help Us?")
+                .setMessage("Select at least a breed or disease, then upload a clear rabbit picture.")
+                .setView(layout)
+                .setPositiveButton("Submit Picture", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        vetContributionDialog.setOnShowListener(dialog -> {
+
+            Button submitButton =
+                    vetContributionDialog.getButton(AlertDialog.BUTTON_POSITIVE);
+
+            submitButton.setEnabled(false);
+
+            submitButton.setOnClickListener(v -> {
+
+                boolean hasBreed = selectedBreed[0] != null;
+                boolean hasDisease = selectedDisease[0] != null;
+                boolean hasPhoto = vetContributionImageUri != null;
+
+                if ((!hasBreed && !hasDisease) || !hasPhoto) {
+
+                    Toast.makeText(
+                            getContext(),
+                            "Please select at least a breed or disease and choose a picture.",
+                            Toast.LENGTH_SHORT
+                    ).show();
+
+                    return;
+                }
+
+                uploadVetContributionImage(
+                        selectedBreed[0],
+                        selectedDisease[0],
+                        vetContributionImageUri
+                );
+            });
+        });
+
+        vetContributionDialog.show();
+    }
+
+    private void updateVetContributionSubmitButton() {
+
+        String breed = vetContributionBreedButton != null
+                ? vetContributionBreedButton.getText().toString()
+                : null;
+
+        String disease = vetContributionDiseaseButton != null
+                ? vetContributionDiseaseButton.getText().toString()
+                : null;
+
+        if ("Select Breed".equals(breed)) {
+            breed = null;
+        }
+
+        if ("Select Disease".equals(disease)) {
+            disease = null;
+        }
+
+        updateVetContributionSubmitButton(breed, disease);
+    }
+
+    private void updateVetContributionSubmitButton(
+            String breed,
+            String disease
+    ) {
+
+        if (vetContributionDialog == null ||
+                !vetContributionDialog.isShowing()) {
+            return;
+        }
+
+        Button submitButton =
+                vetContributionDialog.getButton(AlertDialog.BUTTON_POSITIVE);
+
+        boolean hasBreed =
+                breed != null && !breed.trim().isEmpty();
+
+        boolean hasDisease =
+                disease != null && !disease.trim().isEmpty();
+
+        boolean hasPhoto =
+                vetContributionImageUri != null;
+
+        submitButton.setEnabled(
+                (hasBreed || hasDisease) && hasPhoto
+        );
+    }
+
+    private void uploadVetContributionImage(
+            String breed,
+            String disease,
+            Uri imageUri
+    ) {
+
+        if (imageUri == null ||
+                user == null ||
+                !isVerifiedVet) {
+            return;
+        }
+
+        Button submitButton = vetContributionDialog != null
+                ? vetContributionDialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                : null;
+
+        if (submitButton != null) {
+            submitButton.setEnabled(false);
+        }
+
+        Toast.makeText(
+                getContext(),
+                "Uploading picture...",
+                Toast.LENGTH_SHORT
+        ).show();
+
+        MediaManager.get()
+                .upload(imageUri)
+                .unsigned("ml_default")
+                .callback(new UploadCallback() {
+
+                    @Override
+                    public void onStart(String requestId) {
+                    }
+
+                    @Override
+                    public void onProgress(
+                            String requestId,
+                            long bytes,
+                            long totalBytes
+                    ) {
+                    }
+
+                    @Override
+                    public void onSuccess(
+                            String requestId,
+                            Map resultData
+                    ) {
+
+                        String secureUrl =
+                                (String) resultData.get("secure_url");
+
+                        Map<String, Object> data =
+                                new HashMap<>();
+
+                        data.put(
+                                "breed",
+                                breed != null
+                                        ? breed
+                                        : "Not specified"
+                        );
+
+                        data.put(
+                                "disease",
+                                disease != null
+                                        ? disease
+                                        : "Not specified"
+                        );
+
+                        data.put("imageUrl", secureUrl);
+                        data.put("vetUid", user.getUid());
+                        data.put("vetEmail", user.getEmail());
+                        data.put(
+                                "createdAt",
+                                FieldValue.serverTimestamp()
+                        );
+
+                        db.collection("vetImageSubmissions")
+                                .add(data)
+                                .addOnSuccessListener(
+                                        documentReference -> {
+
+                                            if (vetContributionDialog != null &&
+                                                    vetContributionDialog.isShowing()) {
+
+                                                vetContributionDialog.dismiss();
+                                            }
+
+                                            if (isAdded() &&
+                                                    getContext() != null) {
+
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Picture submitted successfully.",
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+                                            }
+                                        })
+                                .addOnFailureListener(e -> {
+
+                                    if (submitButton != null) {
+                                        submitButton.setEnabled(true);
+                                    }
+
+                                    if (isAdded() &&
+                                            getContext() != null) {
+
+                                        Toast.makeText(
+                                                getContext(),
+                                                "Couldn't save picture: " +
+                                                        e.getMessage(),
+                                                Toast.LENGTH_LONG
+                                        ).show();
+                                    }
+                                });
+                    }
+
+                    @Override
+                    public void onError(
+                            String requestId,
+                            ErrorInfo error
+                    ) {
+
+                        if (submitButton != null) {
+                            submitButton.setEnabled(true);
+                        }
+
+                        if (isAdded() &&
+                                getContext() != null) {
+
+                            Toast.makeText(
+                                    getContext(),
+                                    "Upload failed: " +
+                                            error.getDescription(),
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        }
+                    }
+
+                    @Override
+                    public void onReschedule(
+                            String requestId,
+                            ErrorInfo error
+                    ) {
+                    }
+
+                })
+                .dispatch();
     }
 
     private void loadRabbits() {
@@ -382,11 +818,14 @@ public class Account extends Fragment {
 
                     rabbitList.clear();
 
-                    for (DocumentSnapshot doc : value.getDocuments()) {
+                    for (DocumentSnapshot doc :
+                            value.getDocuments()) {
 
-                        Rabbit rabbit = doc.toObject(Rabbit.class);
+                        Rabbit rabbit =
+                                doc.toObject(Rabbit.class);
 
                         if (rabbit != null) {
+
                             rabbit.setId(doc.getId());
                             rabbitList.add(rabbit);
                         }
@@ -396,287 +835,545 @@ public class Account extends Fragment {
                 });
     }
 
-    /**
-     * Same pattern Community.java uses for its post feed: a live Firestore
-     * listener ordered by timestamp, just scoped to this user's notifications.
-     */
     private void listenForNotificationCount() {
 
-        notificationsListener = db.collection("notifications")
-                .whereEqualTo("recipientId", user.getUid())
-                .whereEqualTo("read", false)
-                .addSnapshotListener((value, error) -> {
+        notificationsListener =
+                db.collection("notifications")
+                        .whereEqualTo(
+                                "recipientId",
+                                user.getUid()
+                        )
+                        .whereEqualTo(
+                                "read",
+                                false
+                        )
+                        .addSnapshotListener(
+                                (value, error) -> {
 
-                    if (error != null || value == null || getContext() == null) return;
+                                    if (error != null ||
+                                            value == null ||
+                                            getContext() == null) {
+                                        return;
+                                    }
 
-                    int unread = value.size();
+                                    int unread = value.size();
 
-                    if (unread > 0) {
-                        notificationBadge.setVisibility(View.VISIBLE);
-                        notificationBadge.setText(String.valueOf(unread));
-                    } else {
-                        notificationBadge.setVisibility(View.GONE);
-                    }
-                });
+                                    if (unread > 0) {
+
+                                        notificationBadge
+                                                .setVisibility(
+                                                        View.VISIBLE
+                                                );
+
+                                        notificationBadge
+                                                .setText(
+                                                        String.valueOf(
+                                                                unread
+                                                        )
+                                                );
+
+                                    } else {
+
+                                        notificationBadge
+                                                .setVisibility(
+                                                        View.GONE
+                                                );
+                                    }
+                                });
     }
 
     private void showNotifications() {
 
-        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        BottomSheetDialog dialog =
+                new BottomSheetDialog(requireContext());
 
-        View sheet = LayoutInflater.from(getContext())
-                .inflate(R.layout.fragment_notification, null);
+        View sheet =
+                LayoutInflater.from(getContext())
+                        .inflate(
+                                R.layout.fragment_notification,
+                                null
+                        );
 
         dialog.setContentView(sheet);
         dialog.show();
 
         RecyclerView notificationsRecyclerView =
-                sheet.findViewById(R.id.notificationsRecyclerView);
+                sheet.findViewById(
+                        R.id.notificationsRecyclerView
+                );
 
-        View emptyNotifications = sheet.findViewById(R.id.emptyNotifications);
+        View emptyNotifications =
+                sheet.findViewById(
+                        R.id.emptyNotifications
+                );
 
-        List<AppNotification> notificationList = new ArrayList<>();
-        NotificationAdapter adapter = new NotificationAdapter(getContext(), notificationList);
+        List<AppNotification> notificationList =
+                new ArrayList<>();
 
-        notificationsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        NotificationAdapter adapter =
+                new NotificationAdapter(
+                        getContext(),
+                        notificationList
+                );
+
+        notificationsRecyclerView.setLayoutManager(
+                new LinearLayoutManager(getContext())
+        );
+
         notificationsRecyclerView.setAdapter(adapter);
 
         db.collection("notifications")
-                .whereEqualTo("recipientId", user.getUid())
-                .orderBy("timestamp", Query.Direction.DESCENDING)
-                .addSnapshotListener((value, error) -> {
+                .whereEqualTo(
+                        "recipientId",
+                        user.getUid()
+                )
+                .orderBy(
+                        "timestamp",
+                        Query.Direction.DESCENDING
+                )
+                .addSnapshotListener(
+                        (value, error) -> {
 
-                    if (error != null || value == null) return;
-
-                    notificationList.clear();
-
-                    for (DocumentSnapshot doc : value.getDocuments()) {
-
-                        AppNotification notification = doc.toObject(AppNotification.class);
-
-                        if (notification != null) {
-                            notification.setId(doc.getId());
-                            notificationList.add(notification);
-
-                            // Mark as read once it's been shown
-                            if (!notification.isRead()) {
-                                doc.getReference().update("read", true);
+                            if (error != null ||
+                                    value == null) {
+                                return;
                             }
-                        }
-                    }
 
-                    adapter.notifyDataSetChanged();
+                            notificationList.clear();
 
-                    emptyNotifications.setVisibility(
-                            notificationList.isEmpty() ? View.VISIBLE : View.GONE);
-                });
+                            for (DocumentSnapshot doc :
+                                    value.getDocuments()) {
+
+                                AppNotification notification =
+                                        doc.toObject(
+                                                AppNotification.class
+                                        );
+
+                                if (notification != null) {
+
+                                    notification.setId(
+                                            doc.getId()
+                                    );
+
+                                    notificationList.add(
+                                            notification
+                                    );
+
+                                    if (!notification.isRead()) {
+                                        doc.getReference()
+                                                .update(
+                                                        "read",
+                                                        true
+                                                );
+                                    }
+                                }
+                            }
+
+                            adapter.notifyDataSetChanged();
+
+                            emptyNotifications.setVisibility(
+                                    notificationList.isEmpty()
+                                            ? View.VISIBLE
+                                            : View.GONE
+                            );
+                        });
     }
 
-    /**
-     * Replaces the old "Privacy" dialog. Presents Change Email / Change
-     * Password / Verify Account as a simple option list.
-     */
     private void openAccountSettings() {
 
-        List<String> optionList = new ArrayList<>();
+        List<String> optionList =
+                new ArrayList<>();
+
         optionList.add("Change Email");
         optionList.add("Change Password");
 
-        // Already-verified vets don't need (and shouldn't see) this option.
         if (!isVerifiedVet) {
             optionList.add("Verify Account");
         }
 
-        String[] options = optionList.toArray(new String[0]);
+        String[] options =
+                optionList.toArray(
+                        new String[0]
+                );
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Account Settings")
-                .setItems(options, (dialog, which) -> {
+                .setItems(
+                        options,
+                        (dialog, which) -> {
 
-                    String selected = options[which];
+                            String selected =
+                                    options[which];
 
-                    if (selected.equals("Change Email")) {
-                        promptReauth(this::promptChangeEmail);
-                    } else if (selected.equals("Change Password")) {
-                        promptReauth(this::promptChangePassword);
-                    } else if (selected.equals("Verify Account")) {
-                        promptVerifyAccount();
-                    }
-                })
-                .setNegativeButton("Cancel", null)
+                            if (selected.equals(
+                                    "Change Email")) {
+
+                                promptReauth(
+                                        this::promptChangeEmail
+                                );
+
+                            } else if (selected.equals(
+                                    "Change Password")) {
+
+                                promptReauth(
+                                        this::promptChangePassword
+                                );
+
+                            } else if (selected.equals(
+                                    "Verify Account")) {
+
+                                promptVerifyAccount();
+                            }
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
-    /**
-     * Firebase requires a recent sign-in before sensitive changes like
-     * updateEmail/updatePassword, or it throws FirebaseAuthRecentLoginRequiredException.
-     * This asks for the current password and re-authenticates first.
-     */
     private void promptReauth(Runnable onSuccess) {
 
         if (user.getEmail() == null) {
-            Toast.makeText(getContext(), "No email on file for this account.", Toast.LENGTH_SHORT).show();
+
+            Toast.makeText(
+                    getContext(),
+                    "No email on file for this account.",
+                    Toast.LENGTH_SHORT
+            ).show();
+
             return;
         }
 
-        EditText passwordInput = new EditText(getContext());
+        EditText passwordInput =
+                new EditText(getContext());
+
         passwordInput.setHint("Current password");
+
         passwordInput.setInputType(
-                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                android.text.InputType.TYPE_CLASS_TEXT |
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Confirm It's You")
-                .setMessage("Please re-enter your password to continue.")
+                .setMessage(
+                        "Please re-enter your password to continue."
+                )
                 .setView(passwordInput)
-                .setPositiveButton("Confirm", (dialog, which) -> {
+                .setPositiveButton(
+                        "Confirm",
+                        (dialog, which) -> {
 
-                    String password = passwordInput.getText().toString();
+                            String password =
+                                    passwordInput
+                                            .getText()
+                                            .toString();
 
-                    if (password.isEmpty()) return;
+                            if (password.isEmpty()) return;
 
-                    AuthCredential credential = EmailAuthProvider.getCredential(user.getEmail(), password);
+                            AuthCredential credential =
+                                    EmailAuthProvider.getCredential(
+                                            user.getEmail(),
+                                            password
+                                    );
 
-                    user.reauthenticate(credential)
-                            .addOnSuccessListener(unused -> onSuccess.run())
-                            .addOnFailureListener(e -> {
+                            user.reauthenticate(credential)
+                                    .addOnSuccessListener(
+                                            unused ->
+                                                    onSuccess.run()
+                                    )
+                                    .addOnFailureListener(
+                                            e -> {
 
-                                if (getContext() == null) return;
+                                                if (getContext() == null)
+                                                    return;
 
-                                Toast.makeText(getContext(), "Re-authentication failed: " + e.getMessage(),
-                                        Toast.LENGTH_LONG).show();
-                            });
-                })
-                .setNegativeButton("Cancel", null)
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Re-authentication failed: " +
+                                                                e.getMessage(),
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+                                            });
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
     private void promptChangeEmail() {
 
-        EditText input = new EditText(getContext());
+        EditText input =
+                new EditText(getContext());
+
         input.setHint("New email");
-        input.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+
+        input.setInputType(
+                android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        );
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Change Email")
                 .setView(input)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton(
+                        "Save",
+                        (dialog, which) -> {
 
-                    String newEmail = input.getText().toString().trim();
+                            String newEmail =
+                                    input.getText()
+                                            .toString()
+                                            .trim();
 
-                    if (newEmail.isEmpty()) return;
+                            if (newEmail.isEmpty()) return;
 
-                    user.updateEmail(newEmail)
-                            .addOnSuccessListener(unused -> {
+                            user.updateEmail(newEmail)
+                                    .addOnSuccessListener(
+                                            unused -> {
 
-                                Map<String, Object> map = new HashMap<>();
-                                map.put("email", newEmail);
+                                                Map<String, Object> map =
+                                                        new HashMap<>();
 
-                                db.collection("users")
-                                        .document(user.getUid())
-                                        .update(map)
-                                        .addOnSuccessListener(unused2 -> {
+                                                map.put(
+                                                        "email",
+                                                        newEmail
+                                                );
 
-                                            if (getContext() == null) return;
+                                                db.collection("users")
+                                                        .document(
+                                                                user.getUid()
+                                                        )
+                                                        .update(map)
+                                                        .addOnSuccessListener(
+                                                                unused2 -> {
 
-                                            profileEmail.setText(newEmail);
-                                            Toast.makeText(getContext(), "Email updated", Toast.LENGTH_SHORT).show();
-                                        });
-                            })
-                            .addOnFailureListener(e -> {
+                                                                    if (getContext() == null)
+                                                                        return;
 
-                                if (getContext() == null) return;
+                                                                    profileEmail
+                                                                            .setText(
+                                                                                    newEmail
+                                                                            );
 
-                                Toast.makeText(getContext(), "Couldn't update email: " + e.getMessage(),
-                                        Toast.LENGTH_LONG).show();
-                            });
-                })
-                .setNegativeButton("Cancel", null)
+                                                                    Toast.makeText(
+                                                                            getContext(),
+                                                                            "Email updated",
+                                                                            Toast.LENGTH_SHORT
+                                                                    ).show();
+                                                                });
+                                            })
+                                    .addOnFailureListener(
+                                            e -> {
+
+                                                if (getContext() == null)
+                                                    return;
+
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Couldn't update email: " +
+                                                                e.getMessage(),
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+                                            });
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
     private void promptChangePassword() {
 
-        EditText input = new EditText(getContext());
+        EditText input =
+                new EditText(getContext());
+
         input.setHint("New password");
+
         input.setInputType(
-                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                android.text.InputType.TYPE_CLASS_TEXT |
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Change Password")
                 .setView(input)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton(
+                        "Save",
+                        (dialog, which) -> {
 
-                    String newPassword = input.getText().toString();
+                            String newPassword =
+                                    input.getText()
+                                            .toString();
 
-                    if (newPassword.length() < 6) {
-                        if (getContext() != null) {
-                            Toast.makeText(getContext(), "Password must be at least 6 characters", Toast.LENGTH_SHORT).show();
-                        }
-                        return;
-                    }
+                            if (newPassword.length() < 6) {
 
-                    user.updatePassword(newPassword)
-                            .addOnSuccessListener(unused -> {
+                                if (getContext() != null) {
 
-                                if (getContext() == null) return;
+                                    Toast.makeText(
+                                            getContext(),
+                                            "Password must be at least 6 characters",
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                }
 
-                                Toast.makeText(getContext(), "Password updated", Toast.LENGTH_SHORT).show();
-                            })
-                            .addOnFailureListener(e -> {
+                                return;
+                            }
 
-                                if (getContext() == null) return;
+                            user.updatePassword(newPassword)
+                                    .addOnSuccessListener(
+                                            unused -> {
 
-                                Toast.makeText(getContext(), "Couldn't update password: " + e.getMessage(),
-                                        Toast.LENGTH_LONG).show();
-                            });
-                })
-                .setNegativeButton("Cancel", null)
+                                                if (getContext() == null)
+                                                    return;
+
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Password updated",
+                                                        Toast.LENGTH_SHORT
+                                                ).show();
+                                            })
+                                    .addOnFailureListener(
+                                            e -> {
+
+                                                if (getContext() == null)
+                                                    return;
+
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Couldn't update password: " +
+                                                                e.getMessage(),
+                                                        Toast.LENGTH_LONG
+                                                ).show();
+                                            });
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
     private void promptVerifyAccount() {
 
+        String[] verificationOptions = {
+                "Verify Veterinarian",
+                "Verify Feed Suppliers"
+        };
+
         new AlertDialog.Builder(getContext())
                 .setTitle("Verify Account")
-                .setMessage("To verify your account as a vet, please upload a clear photo of your veterinary license. " +
-                        "It will be sent to an admin for review.")
-                .setPositiveButton("Choose Photo", (dialog, which) -> openVerificationGallery())
-                .setNegativeButton("Cancel", null)
+                .setItems(
+                        verificationOptions,
+                        (dialog, which) -> {
+
+                            if (which == 0) {
+
+                                verificationType = "veterinarian";
+
+                                promptVerificationPhoto(
+                                        "Verify Veterinarian",
+                                        "Please upload a clear photo of your veterinary license. It will be sent to an admin for review."
+                                );
+
+                            } else {
+
+                                verificationType = "feed_supplier";
+
+                                promptVerificationPhoto(
+                                        "Verify Feed Suppliers",
+                                        "Please upload a clear photo proving that you are a feed supplier. It will be sent to an admin for review."
+                                );
+                            }
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
+                .show();
+    }
+
+    private void promptVerificationPhoto(
+            String title,
+            String message
+    ) {
+
+        verificationImageUri = null;
+
+        new AlertDialog.Builder(getContext())
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(
+                        "Choose Photo",
+                        (dialog, which) ->
+                                openVerificationGallery()
+                )
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
     private void openEditProfile() {
 
-        EditText input = new EditText(getContext());
+        EditText input =
+                new EditText(getContext());
 
         input.setHint("Username");
-        input.setText(profileName.getText().toString());
+
+        input.setText(
+                profileName.getText().toString()
+        );
 
         new AlertDialog.Builder(getContext())
                 .setTitle("Edit Profile")
                 .setView(input)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton(
+                        "Save",
+                        (dialog, which) -> {
 
-                    String newUsername = input.getText().toString().trim();
+                            String newUsername =
+                                    input.getText()
+                                            .toString()
+                                            .trim();
 
-                    if (newUsername.isEmpty()) return;
+                            if (newUsername.isEmpty())
+                                return;
 
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("username", newUsername);
+                            Map<String, Object> map =
+                                    new HashMap<>();
 
-                    db.collection("users")
-                            .document(user.getUid())
-                            .update(map)
-                            .addOnSuccessListener(unused -> {
+                            map.put(
+                                    "username",
+                                    newUsername
+                            );
 
-                                profileName.setText(newUsername);
+                            db.collection("users")
+                                    .document(
+                                            user.getUid()
+                                    )
+                                    .update(map)
+                                    .addOnSuccessListener(
+                                            unused -> {
 
-                                android.widget.Toast.makeText(getContext(),
-                                        "Username Updated",
-                                        android.widget.Toast.LENGTH_SHORT).show();
-                            });
-                })
-                .setNegativeButton("Cancel", null)
+                                                profileName.setText(
+                                                        newUsername
+                                                );
+
+                                                Toast.makeText(
+                                                        getContext(),
+                                                        "Username Updated",
+                                                        Toast.LENGTH_SHORT
+                                                ).show();
+                                            });
+                        })
+                .setNegativeButton(
+                        "Cancel",
+                        null
+                )
                 .show();
     }
 
@@ -684,13 +1381,19 @@ public class Account extends Fragment {
 
         mAuth.signOut();
 
-        startActivity(new Intent(getActivity(), Login.class));
+        startActivity(
+                new Intent(
+                        getActivity(),
+                        Login.class
+                )
+        );
 
         requireActivity().finish();
     }
 
     @Override
     public void onDestroyView() {
+
         super.onDestroyView();
 
         if (notificationsListener != null) {

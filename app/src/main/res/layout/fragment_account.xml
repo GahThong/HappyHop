@@ -13,7 +13,6 @@
         android:orientation="vertical"
         android:paddingBottom="24dp">
 
-        <!-- Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -24,7 +23,6 @@
             android:textSize="24sp"
             android:textStyle="bold" />
 
-        <!-- Avatar + name + email + edit button -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -76,9 +74,22 @@
                 android:textSize="13sp"
                 app:backgroundTint="@null" />
 
+            <Button
+                android:id="@+id/btnVetPictureContribution"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="@color/Orangie"
+                android:minWidth="0dp"
+                android:paddingHorizontal="20dp"
+                android:text="Wanna help us? Add picture here?"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
         </LinearLayout>
 
-        <!-- My Rabbits -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -142,7 +153,6 @@
             android:orientation="vertical"
             android:paddingVertical="4dp">
 
-            <!-- Notifications -->
             <LinearLayout
                 android:id="@+id/rowNotifications"
                 android:layout_width="match_parent"
@@ -183,7 +193,6 @@
                 android:layout_marginStart="18dp"
                 android:background="#EFE7DA" />
 
-            <!-- Privacy -->
             <LinearLayout
                 android:id="@+id/rowPrivacy"
                 android:layout_width="match_parent"
@@ -209,7 +218,6 @@
                 android:layout_marginStart="18dp"
                 android:background="#EFE7DA" />
 
-            <!-- Log Out -->
             <LinearLayout
                 android:id="@+id/rowLogout"
                 android:layout_width="match_parent"
